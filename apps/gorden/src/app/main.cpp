@@ -714,6 +714,9 @@ auto main(int argc, char** argv) -> int {
                 world.registry().ctx().emplace<roboslop::LightUniforms>(roboslop::LightUniforms{
                     .dir = assets.uniform("u_lightDir", bgfx::UniformType::Vec4),
                     .color = assets.uniform("u_lightColor", bgfx::UniformType::Vec4),
+                    .pointPosition =
+                        assets.uniform("u_pointLightPosition", bgfx::UniformType::Vec4),
+                    .pointColor = assets.uniform("u_pointLightColor", bgfx::UniformType::Vec4),
                 });
                 return {};
             },
@@ -777,7 +780,7 @@ auto main(int argc, char** argv) -> int {
                             );
                             const auto& lu =
                                 c.world->registry().ctx().get<roboslop::LightUniforms>();
-                            roboslop::uploadDirectionalLight(*c.world, lu.dir, lu.color);
+                            roboslop::uploadLights(*c.world, lu);
                             auto draws = roboslop::collectMeshDraws(*c.world, arena, c.viewId);
                             roboslop::sortDraws(draws);
                             roboslop::submitDraws(draws);

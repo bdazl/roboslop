@@ -10,6 +10,7 @@ module;
 #include <expected>
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -43,6 +44,7 @@ export struct SceneDocument {
         {"stone", {0.65F, 0.7F, 0.75F}}, {"wood", {0.65F, 0.35F, 0.15F}}
     };
     DirectionalLight light{.direction = {-0.3F, -1.0F, -0.2F}};
+    std::optional<PointLight> pointLight;
     Transform camera{.position = {6, 4, 12}};
 };
 
@@ -93,6 +95,13 @@ export [[nodiscard]] auto validateScene(const SceneDocument& scene) -> Result<vo
         !finite(scene.light.color) || !std::isfinite(scene.light.intensity) ||
         scene.light.intensity < 0 || scene.light.intensity > 100) {
         return std::unexpected(sceneError("invalid camera or light"));
+    }
+    if (scene.pointLight &&
+        (!finite(scene.pointLight->position) || !finite(scene.pointLight->color) ||
+         !std::isfinite(scene.pointLight->intensity) || scene.pointLight->intensity < 0 ||
+         scene.pointLight->intensity > 100 || !std::isfinite(scene.pointLight->range) ||
+         scene.pointLight->range < 0.01F || scene.pointLight->range > 1000.0F)) {
+        return std::unexpected(sceneError("invalid point light"));
     }
     for (const auto& [id, color] : scene.materials) {
         if (id.empty() || !finite(color) || color.x < 0 || color.y < 0 || color.z < 0 ||
@@ -189,7 +198,7 @@ export [[nodiscard]] auto sceneToJson(const SceneDocument& scene) -> nlohmann::j
     for (const auto& [id, color] : scene.materials) {
         materials[id] = detail::vectorJson(color);
     }
-    return {
+    nlohmann::json json = {
         {"version", 1},
         {"objects", objects},
         {"materials", materials},
@@ -199,6 +208,15 @@ export [[nodiscard]] auto sceneToJson(const SceneDocument& scene) -> nlohmann::j
           {"color", detail::vectorJson(scene.light.color)},
           {"intensity", scene.light.intensity}}}
     };
+    if (scene.pointLight) {
+        json["pointLight"] = {
+            {"position", detail::vectorJson(scene.pointLight->position)},
+            {"color", detail::vectorJson(scene.pointLight->color)},
+            {"intensity", scene.pointLight->intensity},
+            {"range", scene.pointLight->range}
+        };
+    }
+    return json;
 }
 
 export [[nodiscard]] auto sceneFromJson(const nlohmann::json& json) -> Result<SceneDocument> {
@@ -220,6 +238,15 @@ export [[nodiscard]] auto sceneFromJson(const nlohmann::json& json) -> Result<Sc
             .color = detail::readVector(light.at("color")),
             .intensity = light.at("intensity").get<float>()
         };
+        if (json.contains("pointLight")) {
+            const auto& point = json.at("pointLight");
+            scene.pointLight = PointLight{
+                .position = detail::readVector(point.at("position")),
+                .color = detail::readVector(point.at("color")),
+                .intensity = point.at("intensity").get<float>(),
+                .range = point.at("range").get<float>()
+            };
+        }
         for (const auto& o : json.at("objects")) {
             scene.objects.push_back(
                 {.id = o.at("id").get<std::string>(),

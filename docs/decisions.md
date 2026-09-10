@@ -11,6 +11,30 @@ links are left as written; they are history.
 
 ---
 
+## 2026-09-10 — Give the ceiling fixture a finite-range point light
+
+**Decision.** Extend forward Lambert lighting with one optional `PointLight`
+alongside the existing directional light. Store its world-space position,
+colour, intensity and range in the version 1 scene document; older scenes may
+omit it. The default room places it at the ceiling globe, while the directional
+light remains as broad fill.
+
+The point term uses a squared smooth falloff to zero at its range. Both light
+types have fixed uniforms and the first component of each type wins; a general
+light array still waits for a scene that needs several lights of the same type.
+
+**Why.** A visible lamp represented only by the directional light cannot cast
+light outward from its location. One point light makes the authored fixture
+illuminate nearby floors, walls and props without introducing a general
+multi-light renderer. Shadow mapping remains separate work because this pass
+does not render or sample shadow maps.
+
+**Where.** `roboslop.render.lighting`, `roboslop.scene.document`,
+`roboslop.scene.runtime`, the scene shaders, the editor light controls and
+`apps/gorden/assets/scenes/room.json`.
+
+---
+
 ## 2026-09-09 — Represent the room light with a ceiling fixture
 
 **Decision.** Add a central ceiling fixture and warm globe to the default room

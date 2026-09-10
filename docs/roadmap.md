@@ -251,8 +251,8 @@ Gorden model is also attached to the runtime robot and turns with its
 kinematic movement. Room authoring has begun: the default scene is now an
 enclosed room with the reusable terminal-station props, a power unit, a
 central ceiling light and a blocked primitive exit. The visible fixture uses
-the existing directional lighting rather than a positional or emissive light.
-The locked-door behaviour, interactions and puzzle remain to be built.
+a colocated finite-range point light, with the directional light retained as
+broad fill. The locked-door behaviour, interactions and puzzle remain to be built.
 
 **Goal.** Start in a small locked room with Gorden, explore and interact,
 solve a computer/terminal puzzle that unlocks/opens the exit, and leave.

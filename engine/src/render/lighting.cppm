@@ -4,7 +4,7 @@ module;
 
 // entt's sparse-set iterator's operator!= is non-member and invisible
 // across the module boundary for single-component range-for views;
-// the include keeps the range-for in uploadDirectionalLight valid
+// the include keeps the range-for views in uploadLights valid
 // (see docs/decisions.md, 2026-05-17 ECS-facade entry).
 #include <entt/entt.hpp>
 #include <glm/geometric.hpp>
@@ -29,13 +29,23 @@ export struct DirectionalLight {
     float intensity = 1.0F;
 };
 
-// Bundle of bgfx uniform handles for the directional-light pass. Game
+// Point light with a smooth finite range. `position` is in world space.
+export struct PointLight {
+    glm::vec3 position{0.0F, 3.0F, 0.0F};
+    glm::vec3 color{1.0F, 1.0F, 1.0F};
+    float intensity = 1.0F;
+    float range = 10.0F;
+};
+
+// Bundle of bgfx uniform handles for the forward-lighting pass. Game
 // code stashes one of these on the world's ctx storage at setup so the
 // pass record callback can find it each frame without capturing it in
 // the lambda.
 export struct LightUniforms {
     bgfx::UniformHandle dir{bgfx::kInvalidHandle};
     bgfx::UniformHandle color{bgfx::kInvalidHandle};
+    bgfx::UniformHandle pointPosition{bgfx::kInvalidHandle};
+    bgfx::UniformHandle pointColor{bgfx::kInvalidHandle};
 };
 
 // Pack a DirectionalLight into the two vec4s the shader binds:
@@ -52,20 +62,36 @@ export [[nodiscard]] auto packDirectionalLightUniform(const DirectionalLight& li
     };
 }
 
-// Finds the first DirectionalLight in the world, packs its uniforms,
-// and pushes them to bgfx via the supplied handles. No-op when no
-// light entity exists; the shader's fallback is a flat black surface.
-export auto uploadDirectionalLight(
-    const World& world, bgfx::UniformHandle uLightDir, bgfx::UniformHandle uLightColor
-) -> void {
+// Pack a PointLight into two vec4s:
+//   u_pointLightPosition = vec4(position, range)
+//   u_pointLightColor    = vec4(color, intensity)
+export [[nodiscard]] auto packPointLightUniform(const PointLight& light) noexcept
+    -> std::array<glm::vec4, 2> {
+    return {
+        glm::vec4{light.position, light.range},
+        glm::vec4{light.color, light.intensity},
+    };
+}
+
+// Uploads the first light of each supported type. Missing lights are
+// explicitly disabled so removing a point light during editor preview
+// cannot leave the previous frame's uniforms active.
+export auto uploadLights(const World& world, const LightUniforms& uniforms) -> void {
     const auto& reg = world.registry();
+    auto directional = packDirectionalLightUniform(DirectionalLight{.intensity = 0.0F});
     for (const auto e : reg.view<const DirectionalLight>()) {
-        const auto& light = reg.get<const DirectionalLight>(e);
-        const auto packed = packDirectionalLightUniform(light);
-        bgfx::setUniform(uLightDir, packed.data());
-        bgfx::setUniform(uLightColor, &packed[1]);
-        return; // first one wins
+        directional = packDirectionalLightUniform(reg.get<const DirectionalLight>(e));
+        break;
     }
+    auto point = packPointLightUniform(PointLight{.intensity = 0.0F});
+    for (const auto e : reg.view<const PointLight>()) {
+        point = packPointLightUniform(reg.get<const PointLight>(e));
+        break;
+    }
+    bgfx::setUniform(uniforms.dir, directional.data());
+    bgfx::setUniform(uniforms.color, &directional[1]);
+    bgfx::setUniform(uniforms.pointPosition, point.data());
+    bgfx::setUniform(uniforms.pointColor, &point[1]);
 }
 
 } // namespace roboslop

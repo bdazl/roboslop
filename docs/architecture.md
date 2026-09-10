@@ -85,9 +85,10 @@ playable without an LLM.
 **Current state.** Gorden loads the shared scene document through
 `SceneRuntime`: an enclosed room blockout with a terminal desk, computer,
 chair, power unit, central ceiling light and a primitive blocked exit. The
-visible fixture represents the scene's single directional light; positional
-lights and emissive materials are not implemented. Static scene objects have
-rigid-body physics. In `apps/gorden/src/app/main.cpp`,
+visible fixture has a colocated point light with finite range, while a
+directional light provides broad fill; emissive materials are not implemented.
+Neither light casts shadows yet. Static scene objects have rigid-body physics.
+In `apps/gorden/src/app/main.cpp`,
 a separate visible player uses the static human `player.glb`, Jolt capsule
 collision and camera-relative keyboard/gamepad movement. `gorden.player` owns the controller and a simple
 third-person orbit camera with a sphere sweep for obstructions. The camera
@@ -284,8 +285,8 @@ failures are `Error`s, HTTP status codes are data.
   zero fixed steps cannot lose a release; `allowCapture=false` (passed
   while a dev-UI window wants the mouse) stops a hold that started on a
   panel from becoming a fly.
-- `roboslop.render.lighting`: one `DirectionalLight` and a Lambert term
-  in the textured fragment shader.
+- `roboslop.render.lighting`: one `DirectionalLight`, one optional finite-range
+  `PointLight`, and their Lambert terms in the textured fragment shader.
 - `roboslop.render.shader`, `roboslop.render.mesh`,
   `roboslop.render.material`: program creation from compiled blobs
   (`makeProgram`) or from the asset root (`loadProgram`), static mesh

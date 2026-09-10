@@ -1,4 +1,5 @@
 import roboslop.scene.document;
+import roboslop.render.lighting;
 #include <catch2/catch_test_macros.hpp>
 #include <nlohmann/json.hpp>
 
@@ -28,11 +29,26 @@ TEST_CASE("Saving and reloading preserves scenes and rejects invalid overwrites"
 TEST_CASE("Scene document round trips without runtime handles", "[scene]") {
     roboslop::SceneDocument scene;
     scene.objects.push_back({.id = "box", .name = "Crate", .body = "dynamic"});
+    scene.pointLight = roboslop::PointLight{
+        .position = {1.0F, 2.0F, 3.0F},
+        .color = {1.0F, 0.8F, 0.6F},
+        .intensity = 4.0F,
+        .range = 10.0F,
+    };
     const auto json = roboslop::sceneToJson(scene);
     auto decoded = roboslop::sceneFromJson(json);
     REQUIRE(decoded);
     REQUIRE(roboslop::sceneToJson(*decoded) == json);
     REQUIRE_FALSE(json.dump().contains("RigidBody"));
+    REQUIRE(json["pointLight"]["position"] == nlohmann::json::array({1.0F, 2.0F, 3.0F}));
+}
+
+TEST_CASE("Version one scenes may omit the optional point light", "[scene]") {
+    const auto json = roboslop::sceneToJson({});
+    REQUIRE_FALSE(json.contains("pointLight"));
+    const auto decoded = roboslop::sceneFromJson(json);
+    REQUIRE(decoded);
+    REQUIRE_FALSE(decoded->pointLight.has_value());
 }
 
 TEST_CASE("Model objects round trip and primitives omit the model key", "[scene]") {
@@ -77,6 +93,10 @@ TEST_CASE("Scene validation rejects invalid references and physics geometry", "[
     SECTION("zero light direction") {
         scene.light.direction = {0, 0, 0};
     }
+    SECTION("invalid point light range") {
+        scene.pointLight.emplace();
+        scene.pointLight->range = 0;
+    }
     SECTION("nonuniform collider sphere") {
         scene.objects[0].geometry = "sphere";
         scene.objects[0].body = "dynamic";
@@ -112,6 +132,9 @@ TEST_CASE("Scene input errors are values and never partial documents", "[scene]"
     }
     SECTION("wrong scalar type") {
         json["light"]["intensity"] = "bright";
+    }
+    SECTION("malformed point light") {
+        json["pointLight"] = {{"position", "overhead"}};
     }
     REQUIRE_FALSE(roboslop::sceneFromJson(json));
 }

@@ -107,6 +107,10 @@ TEST_CASE("The authored room grounds props on explicit support surfaces", "[gord
         lightGlobe->transform.position.y + (lightGlobe->transform.scale.y * 0.5F);
     REQUIRE(fixtureTop == Catch::Approx(ceilingUnderside));
     REQUIRE(globeTop == Catch::Approx(fixtureBottom));
+    REQUIRE(scene.pointLight.has_value());
+    REQUIRE(scene.pointLight->position.x == Catch::Approx(lightGlobe->transform.position.x));
+    REQUIRE(scene.pointLight->position.y == Catch::Approx(lightGlobe->transform.position.y));
+    REQUIRE(scene.pointLight->position.z == Catch::Approx(lightGlobe->transform.position.z));
 }
 
 TEST_CASE("The robot visual shares its actor's ground contact", "[gorden][model]") {

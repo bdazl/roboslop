@@ -72,7 +72,9 @@ auto main(int argc, char** argv) -> int {
              world.emplace<roboslop::ActiveCamera>(camera);
              uniforms = {
                  .dir = assets.uniform("u_lightDir", bgfx::UniformType::Vec4),
-                 .color = assets.uniform("u_lightColor", bgfx::UniformType::Vec4)
+                 .color = assets.uniform("u_lightColor", bgfx::UniformType::Vec4),
+                 .pointPosition = assets.uniform("u_pointLightPosition", bgfx::UniformType::Vec4),
+                 .pointColor = assets.uniform("u_pointLightColor", bgfx::UniformType::Vec4)
              };
              return world.registry().ctx().emplace<roboslop::SceneRuntime>().replace(
                  world, assets, document, false
@@ -120,7 +122,7 @@ auto main(int argc, char** argv) -> int {
                           );
                           failed |= !found || roboslop::sceneToJson(document) != expected;
                           roboslop::applyActiveCamera(world, c.viewId, c.viewportW, c.viewportH);
-                          roboslop::uploadDirectionalLight(world, uniforms.dir, uniforms.color);
+                          roboslop::uploadLights(world, uniforms);
                           auto draws = roboslop::collectMeshDraws(world, arena, c.viewId);
                           roboslop::sortDraws(draws);
                           roboslop::submitDraws(draws);

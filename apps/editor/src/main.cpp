@@ -405,6 +405,39 @@ auto drawInspector(EditorState& state) -> void {
             ImGuiSliderFlags_AlwaysClamp
         );
     }
+    if (ImGui::CollapsingHeader("Point light")) {
+        bool enabled = state.history.document.pointLight.has_value();
+        if (ImGui::Checkbox("Enabled", &enabled)) {
+            if (enabled) {
+                state.history.document.pointLight.emplace();
+            } else {
+                state.history.document.pointLight.reset();
+            }
+        }
+        if (state.history.document.pointLight) {
+            auto& point = *state.history.document.pointLight;
+            ImGui::DragFloat3("Position", glm::value_ptr(point.position), 0.02F);
+            ImGui::ColorEdit3("Point color", glm::value_ptr(point.color));
+            ImGui::DragFloat(
+                "Point intensity",
+                &point.intensity,
+                0.02F,
+                0,
+                100,
+                "%.2f",
+                ImGuiSliderFlags_AlwaysClamp
+            );
+            ImGui::DragFloat(
+                "Point range",
+                &point.range,
+                0.02F,
+                0.01F,
+                1000,
+                "%.2f",
+                ImGuiSliderFlags_AlwaysClamp
+            );
+        }
+    }
     if (roboslop::sceneToJson(before) != roboslop::sceneToJson(state.history.document)) {
         if (auto valid = roboslop::validateScene(state.history.document); !valid) {
             state.status = valid.error().context;
@@ -620,7 +653,7 @@ auto graphs(
                  state.rebuild = false;
              }
              roboslop::applyActiveCamera(*c.world, c.viewId, c.viewportW, c.viewportH);
-             roboslop::uploadDirectionalLight(*c.world, state.light.dir, state.light.color);
+             roboslop::uploadLights(*c.world, state.light);
              auto draws = roboslop::collectMeshDraws(*c.world, arena, c.viewId);
              roboslop::sortDraws(draws);
              roboslop::submitDraws(draws);
@@ -680,7 +713,9 @@ auto main(int argc, char** argv) -> int {
              resetCamera(world, state);
              state.light = {
                  .dir = assets.uniform("u_lightDir", bgfx::UniformType::Vec4),
-                 .color = assets.uniform("u_lightColor", bgfx::UniformType::Vec4)
+                 .color = assets.uniform("u_lightColor", bgfx::UniformType::Vec4),
+                 .pointPosition = assets.uniform("u_pointLightPosition", bgfx::UniformType::Vec4),
+                 .pointColor = assets.uniform("u_pointLightColor", bgfx::UniformType::Vec4)
              };
              auto& runtime = world.registry().ctx().emplace<roboslop::SceneRuntime>();
              auto loaded = runtime.replace(world, assets, scene, false);

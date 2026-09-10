@@ -43,7 +43,7 @@ exists today, all driven by the Gorden demo:
 - Asset loading: meshes via Assimp, textures via stb_image, a
   `Material` component, and an `AssetCache` that owns GPU-side
   programs, textures, and uniforms.
-- One forward directional light with Lambert shading.
+- One directional light and one optional point light with Lambert shading.
 - Audio foundation via miniaudio: device, 3D listener and source
   systems.
 - Animation data layer: skeleton, clips, CPU clip sampling, and an

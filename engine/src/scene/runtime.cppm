@@ -211,6 +211,11 @@ export class SceneRuntime {
         const auto light = world.create();
         entities.push_back(light);
         world.emplace<DirectionalLight>(light, document.light);
+        if (document.pointLight) {
+            const auto pointLight = world.create();
+            entities.push_back(pointLight);
+            world.emplace<PointLight>(pointLight, *document.pointLight);
+        }
         return {};
     }
 
