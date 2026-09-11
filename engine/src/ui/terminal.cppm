@@ -58,6 +58,10 @@ export class TerminalWindow {
         scrollToBottom = true;
     }
 
+    auto focus() noexcept -> void {
+        focusInput = true;
+    }
+
     auto draw() -> void {
         pollFollow();
 

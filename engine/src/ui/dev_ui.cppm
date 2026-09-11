@@ -29,6 +29,7 @@ export struct DevUiConfig {
     // Where ImGui persists window positions / docking layout. Empty
     // keeps everything in memory for the session.
     std::filesystem::path iniPath;
+    float fontSize = 13.0F;
 };
 
 // A registered dev window. The registry owns Begin/End and the View
@@ -39,6 +40,7 @@ export struct DevWindow {
     std::string title;
     std::function<void()> draw;
     bool visible = true;
+    bool autoResize = false;
 };
 
 export struct WindowVisibility {
@@ -55,7 +57,8 @@ export struct WindowVisibility {
 // and, in their last render pass, call beginFrame() → drawWindows() →
 // any ad-hoc ImGui → endFrame(). drawWindows() draws the main menu bar
 // with a View menu (one checkbox per window, Show all / Hide all) and
-// every visible window. F1 (handled by App) toggles the whole overlay.
+// every visible window. F1 (handled by App) toggles registered developer
+// windows. Apps may draw gameplay overlays independently in the same frame.
 //
 // Lifetime: created after bgfx init and the AssetCache (it borrows the
 // vs_imgui/fs_imgui program from there), destroyed before both.
@@ -76,6 +79,9 @@ export class DevUi {
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         io.IniFilename = nullptr; // set below once the path string is owned
         ImGui::StyleColorsDark();
+        ImFontConfig fontConfig;
+        fontConfig.SizePixels = config.fontSize;
+        io.Fonts->AddFontDefault(&fontConfig);
 
         // install_callbacks=true chains onto whatever GLFW callbacks are
         // already set, so Window's own resize callback keeps working.
@@ -197,7 +203,11 @@ export class DevUi {
             if (!w.visible) {
                 continue;
             }
-            if (ImGui::Begin(w.title.c_str(), &w.visible)) {
+            if (ImGui::Begin(
+                    w.title.c_str(),
+                    &w.visible,
+                    w.autoResize ? ImGuiWindowFlags_AlwaysAutoResize : ImGuiWindowFlags_None
+                )) {
                 if (w.draw) {
                     w.draw();
                 }

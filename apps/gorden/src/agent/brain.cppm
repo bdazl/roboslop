@@ -159,7 +159,7 @@ export class AgentBrain {
         }
     }
 
-    // Live rename (Settings window). Takes effect from the next think;
+    // Live rename (pause menu's Settings page). Takes effect from the next think;
     // the transcript keeps role keys ("player"/"robot"), the UI maps
     // them to names.
     auto setNames(std::string robotName, std::string playerName) -> void {

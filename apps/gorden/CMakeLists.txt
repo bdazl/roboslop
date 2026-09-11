@@ -3,6 +3,7 @@
 # without the window/bgfx main.
 roboslop_add_module_library(gorden_agent
     MODULES
+        src/gameplay/interface.cppm
         src/gameplay/player.cppm
         src/gameplay/player_visual.cppm
         src/gameplay/robot_visual.cppm

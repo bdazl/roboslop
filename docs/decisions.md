@@ -11,6 +11,27 @@ links are left as written; they are history.
 
 ---
 
+## 2026-09-10 — Separate Gorden gameplay UI from developer windows
+
+**Decision.** Use fixed game overlays for anywhere chat, timed robot subtitles,
+the fullscreen computer terminal and the Escape pause/settings menu. Keep
+Performance (compact summary plus expandable details), Agent log and a separate
+developer terminal behind `--dev`, passed by Gorden's Make run targets. F1 only
+toggles developer tools. Reuse the sandbox shell for this interface slice; the
+puzzle's commands and world effects remain separate work.
+
+**Why.** Playing the game should not require arranging developer windows. Explicit
+Gorden-owned interface modes arbitrate input before fixed updates. Escape backs
+out of interactions before opening the menu; only the menu/settings pause all
+fixed simulation, with background provider results applied after resume.
+
+**Where.** `gorden.interface`, Gorden's app presentation, `AppConfig::enableGameUi`
+and `onFrame`, `AppSimulationState`, and [player controls](player-controls.md).
+The first computer target is the live `terminal-monitor` within 2 m, without a
+general interaction hierarchy. No save format change is needed for transient UI.
+
+---
+
 ## 2026-09-10 — Give the ceiling fixture a finite-range point light
 
 **Decision.** Extend forward Lambert lighting with one optional `PointLight`

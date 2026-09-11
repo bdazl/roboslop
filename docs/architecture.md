@@ -95,8 +95,11 @@ third-person orbit camera with a sphere sweep for obstructions. The camera
 carries the audio listener; `AgentBrain` and saves use the player entity.
 See [player controls](player-controls.md) for controls and current limits.
 Gorden uses the static two-wheel `gorden.glb`, moving directly toward targets
-without a physics body or pathfinding. The terminal and robot chat are developer windows. There
-is no gameplay computer, door state, interaction mode or escape puzzle.
+without a physics body or pathfinding. The computer opens a fullscreen terminal
+through a proximity interaction; chat is
+available anywhere through a HUD button/T and replies appear as timed subtitles.
+An Escape menu pauses simulation and offers settings, save/load and quit. Developer
+windows require `--dev`. There is no door state or escape puzzle yet.
 
 The robot perceives structured observations and acts through validated
 high-level tools; it never drives locomotion or physics frame by frame.
@@ -106,6 +109,9 @@ The gameplay and agent code share the `gorden_agent` module library
 (`apps/gorden/src/gameplay/` and `src/agent/`, tested by `gorden_tests`):
 
 - `gorden.player` — player input, capsule movement, orbit and camera obstruction.
+- `gorden.interface` — Explore/Chat/Terminal/Menu/Settings modes, once-per-frame
+  shortcut routing, pause state and the first room’s monitor proximity check.
+  Presentation remains in Gorden’s app; see [player controls](player-controls.md).
 - `gorden.agent.observation` — `Named` component, `buildObservation`
   (every named entity within a radius, sorted by distance; no
   line-of-sight yet) and `observationToJson`, the text the model reads.
@@ -144,11 +150,12 @@ written by the app, and never mounted into the robot's filesystem.
 name (default "Gorden"), which dev windows are open — as JSON at
 `configDir()/gorden.json`. Names feed the `Named` components and the
 brain's system prompt (`{robot}` / `{player}` placeholders); the
-Settings window applies them live and saves them. Window visibility is
+Escape menu’s Settings page applies them live and saves them. Window visibility is
 saved whenever it changes; the ImGui layout lives in
 `configDir()/gorden.imgui.ini`.
 
-The "Terminal" window is a `TerminalWindow` over a `Shell` over the
+The fullscreen computer interface and separate developer terminal use
+`TerminalWindow` widgets over a `Shell` over the
 app's `Vfs`, which mounts:
 
 | Path | Backing |
@@ -347,6 +354,13 @@ extraction from Assimp are not implemented.
 
 ### Dev UI
 
+Gameplay can request the same renderer with `AppConfig::enableGameUi`, independently
+of `enableDevUi` and `ROBOSLOP_DEV_UI`. Gorden draws its fixed game overlays outside
+the window registry, so F1 only affects developer tools. `AppConfig::onFrame` runs
+once after input polling and before fixed updates; Gorden routes shortcuts there
+and sets `AppSimulationState::paused`. Pausing skips all fixed systems while
+continuing rendering/input and consuming elapsed time, with no resume catch-up.
+
 `roboslop.ui` wraps one Dear ImGui context. Input comes through ImGui's
 own GLFW platform backend (compiled from the Conan package's
 `res/bindings`, chained onto the existing GLFW callbacks); drawing goes
@@ -359,10 +373,12 @@ widgets of its own, but it owns the **window registry**: an app calls
 render pass, `beginFrame()` → `drawWindows()` → `endFrame(viewId)`.
 `drawWindows()` draws the main menu bar with a View menu (one checkbox
 per window, Show all / Hide all, Hide overlay) and `Begin`/`End` around
-every visible window's `draw` callback. F1 toggles the whole overlay
+every visible window's `draw` callback. F1 toggles the developer windows
 (`App` calls `toggleEnabled()`); `visibility()` / `applyVisibility()`
 let an app persist which windows are open. `AppConfig::devUiIniPath`
-gives ImGui an ini file so docking layouts survive restarts.
+gives ImGui an ini file so docking layouts survive restarts. `uiFontSize` selects
+the font size at atlas creation (Gorden uses 18 px). Performance opts into
+`DevWindow::autoResize`, so its summary actually shrinks the window.
 `wantCaptureMouse()` / `wantCaptureKeyboard()` let gameplay or camera
 systems yield input to the UI. The ImGui shader pair lives under
 `engine/assets/shaders/` and compiles into the shared
@@ -476,8 +492,8 @@ floor support and small steps; gameplay policy stays in `gorden.player`.
 ### Input
 
 `InputSnapshot` contains keyboard/mouse state, focus and GLFW-normalized
-gamepad sticks/B, captured on the platform thread. Movement, look and cancel
-are implemented; interact and terminal routing remain planned:
+gamepad sticks/A/B/X/Start, captured on the platform thread. Movement, look and cancel
+are implemented, including the first computer interaction and terminal routing:
 
 | Action | Keyboard/mouse | Xbox-style controller |
 |---|---|---|
@@ -487,9 +503,9 @@ are implemented; interact and terminal routing remain planned:
 | Cancel | Escape | B |
 
 A general rebinding/action-map framework waits for a concrete need. Input
-routing must distinguish exploration, terminal use and developer UI. Escape/B
-now cancel mouse capture and suppress gameplay input while held; Escape no
-longer closes Gorden. See [player controls](player-controls.md).
+routing distinguishes exploration, chat, terminal use, pause/settings and developer
+UI. Escape/B leave the current interaction before opening the pause menu from
+exploration. See [player controls](player-controls.md).
 Controller terminal navigation/text entry remains an implementation question,
 but the playable loop must be completable with either input scheme.
 
@@ -535,8 +551,9 @@ player used a computer in the world, rather than being a permanent debug
 panel. Keep the developer terminal/debug UI separately available through
 the developer UI; gameplay access must not depend on opening a debug window.
 
-Today's developer VFS mounts are useful infrastructure, not an agreed set
-of gameplay-visible files or commands. Select those for the puzzle. Any
+The current computer reuses the existing sandbox VFS mounts as an initial
+interface. This is not yet the puzzle’s final file/command set; select that
+when implementing the door puzzle. Any
 agent terminal/shell access must remain sandboxed to game abstractions and
 the VFS, never arbitrary host execution; no shell tool exists for agents today.
 

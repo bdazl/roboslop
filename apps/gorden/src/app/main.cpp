@@ -4,6 +4,7 @@ import gorden.agent.observation;
 import gorden.agent.robot;
 import gorden.save;
 import gorden.player;
+import gorden.interface;
 import gorden.player_visual;
 import gorden.robot_visual;
 import gorden.settings;
@@ -42,10 +43,12 @@ import roboslop.vfs;
 #include <imgui.h>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -60,15 +63,19 @@ import roboslop.vfs;
 
 namespace {
 
-// Per-frame UI state for the Robot panel, parked in the world context.
-struct RobotPanelState {
+// Conversation input, history scrolling and queued in-game replies.
+struct ConversationState {
     std::array<char, 256> input{};
     bool scrollTranscript = false;
     std::size_t seenLines = 0;
+    bool focusInput = false;
+    std::size_t subtitleCursor = 0;
+    std::deque<std::string> subtitles;
+    float subtitleRemaining = 0.0F;
 };
 
-// Settings as loaded/edited, plus the edit buffers for the Settings
-// window and the last window-visibility snapshot (saved on change).
+// Settings as loaded/edited, plus the edit buffers for the pause menu's
+// Settings page and the last dev-window visibility snapshot (saved on change).
 struct SettingsState {
     gorden::GordenSettings settings;
     std::filesystem::path path;
@@ -80,7 +87,7 @@ struct SettingsState {
 
 // Saving and loading are explicit, and both need the AssetCache, which
 // only a render pass gets. The UI and the shell therefore record a
-// request here and the "robotChat" pass carries it out.
+// request here and the "gameUi" pass carries it out.
 struct SaveState {
     enum class Request : std::uint8_t {
         None,
@@ -114,7 +121,7 @@ auto saveSettingsNow(SettingsState& st) -> void {
         st.status = std::format("save failed: {} ({})", r.error().message, r.error().context);
         spdlog::warn("gorden: {}", st.status);
     } else {
-        st.status = "saved to " + st.path.string();
+        st.status = "Settings saved.";
     }
 }
 
@@ -172,11 +179,12 @@ auto drawSettingsPanel(roboslop::World& world, SettingsState& st, gorden::AgentB
         applyNames(world, st, brain);
         saveSettingsNow(st);
     }
-    ImGui::TextDisabled("%s", st.path.string().c_str());
     if (!st.status.empty()) {
         ImGui::TextUnformatted(st.status.c_str());
     }
+}
 
+auto drawSavePanel(roboslop::World& world) -> void {
     ImGui::SeparatorText("Save game");
     auto& save = world.registry().ctx().get<SaveState>();
     if (ImGui::InputText("Slot", save.slotBuf.data(), save.slotBuf.size()) &&
@@ -190,7 +198,6 @@ auto drawSettingsPanel(roboslop::World& world, SettingsState& st, gorden::AgentB
     if (ImGui::Button("Load game")) {
         save.request = SaveState::Request::Load;
     }
-    ImGui::TextDisabled("%s", gorden::savePath(save.slot).string().c_str());
     if (!save.status.empty()) {
         ImGui::TextUnformatted(save.status.c_str());
     }
@@ -273,19 +280,7 @@ auto makeProvider() -> std::unique_ptr<roboslop::Provider> {
     );
 }
 
-auto drawRobotPanel(roboslop::World& world, gorden::AgentBrain& brain, RobotPanelState& st)
-    -> void {
-
-    ImGui::TextUnformatted(
-        std::format(
-            "provider: {}   state: {}   thinks: {}",
-            brain.providerName(),
-            brain.thinking() ? "Thinking" : "Idle",
-            brain.thinkCount()
-        )
-            .c_str()
-    );
-    ImGui::Separator();
+auto drawConversation(gorden::AgentBrain& brain, ConversationState& st) -> void {
 
     // The transcript fills the window above one row of input, so the
     // Send row follows the window's size. Scrolling follows new lines
@@ -312,6 +307,10 @@ auto drawRobotPanel(roboslop::World& world, gorden::AgentBrain& brain, RobotPane
     st.seenLines = lineCount;
     ImGui::EndChild();
 
+    if (st.focusInput) {
+        ImGui::SetKeyboardFocusHere();
+        st.focusInput = false;
+    }
     ImGui::SetNextItemWidth(-80.0F);
     const bool entered = ImGui::InputText(
         "##say", st.input.data(), st.input.size(), ImGuiInputTextFlags_EnterReturnsTrue
@@ -322,10 +321,8 @@ auto drawRobotPanel(roboslop::World& world, gorden::AgentBrain& brain, RobotPane
         brain.playerSays(std::string{st.input.data()});
         st.input.fill('\0');
         st.scrollTranscript = true;
-        ImGui::SetKeyboardFocusHere(-1);
+        st.focusInput = true;
     }
-
-    (void)world;
 }
 
 // The validated action log: every observation delivered, proposal,
@@ -338,6 +335,12 @@ struct AgentLogState {
 };
 
 auto drawAgentLogPanel(gorden::AgentBrain& brain, AgentLogState& st) -> void {
+    ImGui::Text(
+        "%s | %s | %u thinks",
+        std::string{brain.providerName()}.c_str(),
+        brain.thinking() ? "Thinking" : "Idle",
+        brain.thinkCount()
+    );
     ImGui::SetNextItemWidth(220.0F);
     ImGui::InputTextWithHint("##filter", "filter", st.filter.data(), st.filter.size());
     ImGui::SameLine();
@@ -363,6 +366,163 @@ auto drawAgentLogPanel(gorden::AgentBrain& brain, AgentLogState& st) -> void {
         ImGui::SetScrollHereY(1.0F);
     }
     ImGui::EndChild();
+}
+
+// Fixed overlays share the game's ImGui frame, but never the dev-window registry.
+auto drawGameInterface(roboslop::World& world) -> void {
+    using gorden::InterfaceMode;
+    auto& ctx = world.registry().ctx();
+    auto& state = ctx.get<gorden::InterfaceState>();
+    auto& brain = ctx.get<gorden::AgentBrain>();
+    auto& chat = ctx.get<ConversationState>();
+    auto& terminal = ctx.get<roboslop::TerminalWindow>();
+    const auto* viewport = ImGui::GetMainViewport();
+    const auto origin = viewport->Pos;
+    const auto size = viewport->Size;
+    constexpr ImGuiWindowFlags Overlay = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                                         ImGuiWindowFlags_NoSavedSettings |
+                                         ImGuiWindowFlags_NoDocking;
+    const auto position = [&](float x, float y) { return ImVec2(origin.x + x, origin.y + y); };
+
+    // Queue every new reply, including several say calls in one think.
+    const auto& transcript = brain.transcript();
+    if (chat.subtitleCursor > transcript.size()) {
+        chat.subtitleCursor = 0;
+        chat.subtitles.clear();
+        chat.subtitleRemaining = 0.0F;
+    }
+    while (chat.subtitleCursor < transcript.size()) {
+        const auto& line = transcript[chat.subtitleCursor++];
+        if (line.who == "robot") {
+            chat.subtitles.push_back(line.text);
+        }
+    }
+    if (!state.paused() && state.mode != InterfaceMode::Terminal && !chat.subtitles.empty()) {
+        if (chat.subtitleRemaining <= 0.0F) {
+            chat.subtitleRemaining = std::clamp(
+                3.0F + (static_cast<float>(chat.subtitles.front().size()) * 0.045F), 4.0F, 18.0F
+            );
+        }
+        chat.subtitleRemaining -= ImGui::GetIO().DeltaTime;
+        if (chat.subtitleRemaining <= 0.0F) {
+            chat.subtitles.pop_front();
+        }
+    }
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0F, 16.0F));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0F);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.025F, 0.055F, 0.07F, 0.94F));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.08F, 0.28F, 0.32F, 1.0F));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.12F, 0.40F, 0.45F, 1.0F));
+
+    if (state.mode == InterfaceMode::Terminal) {
+        ImGui::SetNextWindowPos(origin);
+        ImGui::SetNextWindowSize(size);
+        ImGui::Begin("##computer", nullptr, Overlay);
+        ImGui::TextUnformatted("TERMINAL / GORDEN");
+        ImGui::SameLine();
+        if (ImGui::Button("Leave computer [Esc]")) {
+            state.cancel();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Chat")) {
+            state.chat();
+        }
+        ImGui::Separator();
+        if (std::exchange(state.focusTerminal, false)) {
+            terminal.focus();
+        }
+        terminal.draw();
+        ImGui::End();
+    } else if (state.paused()) {
+        ImGui::GetBackgroundDrawList()->AddRectFilled(
+            origin, position(size.x, size.y), IM_COL32(0, 0, 0, 150)
+        );
+        ImGui::SetNextWindowPos(
+            position(size.x * 0.5F, size.y * 0.5F), ImGuiCond_Always, ImVec2(0.5F, 0.5F)
+        );
+        ImGui::SetNextWindowSize(ImVec2(std::min(480.0F, size.x), 0.0F));
+        ImGui::SetNextWindowSizeConstraints(ImVec2(0.0F, 0.0F), size);
+        ImGui::Begin("##pause", nullptr, Overlay | ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::SeparatorText(state.mode == InterfaceMode::Settings ? "SETTINGS" : "PAUSED");
+        if (state.mode == InterfaceMode::Settings) {
+            drawSettingsPanel(world, ctx.get<SettingsState>(), brain);
+            if (ImGui::Button("Back [Esc]")) {
+                state.cancel();
+            }
+        } else {
+            if (ImGui::Button("Resume [Esc]", ImVec2(-1.0F, 36.0F))) {
+                state.cancel();
+            }
+            if (ImGui::Button("Settings", ImVec2(-1.0F, 36.0F))) {
+                state.mode = InterfaceMode::Settings;
+            }
+            drawSavePanel(world);
+            ImGui::Separator();
+            if (ImGui::Button("Quit game", ImVec2(-1.0F, 36.0F))) {
+                roboslop::requestAppClose(world);
+            }
+        }
+        ImGui::End();
+    } else if (state.mode == InterfaceMode::Chat) {
+        ImGui::SetNextWindowPos(
+            position(size.x * 0.5F, size.y - 22.0F), ImGuiCond_Always, ImVec2(0.5F, 1.0F)
+        );
+        ImGui::SetNextWindowSize(ImVec2(std::min(720.0F, size.x), std::min(380.0F, size.y)));
+        ImGui::Begin("##conversation", nullptr, Overlay);
+        ImGui::Text("Conversation with %s", brain.config().robotName.c_str());
+        ImGui::SameLine();
+        if (ImGui::Button("Close [Esc]")) {
+            state.cancel();
+        }
+        if (brain.thinking()) {
+            ImGui::TextDisabled("Waiting for a reply...");
+        }
+        chat.focusInput |= std::exchange(state.focusChat, false);
+        drawConversation(brain, chat);
+        ImGui::End();
+    } else {
+        if (!chat.subtitles.empty()) {
+            ImGui::SetNextWindowPos(
+                position(size.x * 0.5F, size.y - 86.0F), ImGuiCond_Always, ImVec2(0.5F, 1.0F)
+            );
+            ImGui::SetNextWindowSize(ImVec2(std::min(700.0F, size.x), 0.0F));
+            ImGui::Begin(
+                "##reply",
+                nullptr,
+                Overlay | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs
+            );
+            ImGui::TextColored(
+                ImVec4(0.5F, 0.88F, 0.92F, 1.0F), "%s", brain.config().robotName.c_str()
+            );
+            ImGui::TextWrapped("%s", chat.subtitles.front().c_str());
+            ImGui::End();
+        }
+        ImGui::SetNextWindowPos(
+            position(size.x * 0.5F, size.y - 16.0F), ImGuiCond_Always, ImVec2(0.5F, 1.0F)
+        );
+        ImGui::Begin("##actions", nullptr, Overlay | ImGuiWindowFlags_AlwaysAutoResize);
+        if (ImGui::Button("Chat [T / X]")) {
+            state.chat();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Menu [Esc / Start]")) {
+            state.mode = InterfaceMode::Menu;
+        }
+        if (gorden::computerInReach(
+                world, world.get<roboslop::Transform>(brain.playerEntity()).position
+            )) {
+            ImGui::SameLine();
+            if (ImGui::Button("Use computer [E / A]")) {
+                state.mode = InterfaceMode::Terminal;
+                state.focusTerminal = true;
+            }
+        }
+        ImGui::End();
+    }
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar(2);
+    ctx.get<roboslop::AppSimulationState>().paused = state.paused();
 }
 
 // The debug terminal's view of the app: live files over the brain and
@@ -495,11 +655,17 @@ auto mountGordenFiles(roboslop::World& world, roboslop::Vfs& fs) -> void {
 
 auto main(int argc, char** argv) -> int {
     std::filesystem::path scenePath = "assets/scenes/room.json";
-    if (argc == 3 && std::string_view{argv[1]} == "--scene") {
-        scenePath = argv[2];
-    } else if (argc != 1) {
-        std::println(stderr, "Usage: gorden [--scene path]");
-        return 1;
+    bool developer = false;
+    for (int i = 1; i < argc; ++i) {
+        const std::string_view arg{argv[i]};
+        if (arg == "--dev") {
+            developer = ROBOSLOP_DEV_UI != 0;
+        } else if (arg == "--scene" && i + 1 < argc) {
+            scenePath = argv[++i];
+        } else {
+            std::println(stderr, "Usage: gorden [--dev] [--scene path]");
+            return 1;
+        }
     }
     auto scene = roboslop::loadScene(scenePath);
     if (!scene) {
@@ -524,10 +690,30 @@ auto main(int argc, char** argv) -> int {
             .window = roboslop::WindowConfig{.title = "gorden", .width = 1280, .height = 720},
             .tickRateHz = 60.0,
             .assetRoot = "assets",
-            .enableDevUi = true,
+            .enableDevUi = developer,
+            .enableGameUi = true,
             .devUiIniPath = roboslop::configDir() / "gorden.imgui.ini",
+            .uiFontSize = 18.0F,
             .closeOnEscape = false,
-            .onSetup = [initial, document = *scene, scenePathText = scenePath.string()](
+            .onFrame =
+                [](roboslop::World& world, roboslop::Input& input) {
+                    auto& ctx = world.registry().ctx();
+                    auto& state = ctx.get<gorden::InterfaceState>();
+                    auto& controls = ctx.get<gorden::PlayerControls>();
+                    const auto player = ctx.get<gorden::AgentBrain>().playerEntity();
+                    const bool nearby = gorden::computerInReach(
+                        world, world.get<roboslop::Transform>(player).position
+                    );
+                    state.update(input, controls.uiKeyboard, nearby);
+                    ctx.get<roboslop::AppSimulationState>().paused = state.paused();
+                    if (state.mode != gorden::InterfaceMode::Explore) {
+                        controls.uiKeyboard = true;
+                        controls.lookBlocked = input.mouseButton(roboslop::MouseButton::Right);
+                        input.setCursorCaptured(false);
+                        (void)input.takeLookDelta();
+                    }
+                },
+            .onSetup = [initial, developer, document = *scene, scenePathText = scenePath.string()](
                            roboslop::World& world, roboslop::AssetCache& assets
                        ) -> roboslop::Result<void> {
                 const auto cameraEntity = world.create();
@@ -591,7 +777,8 @@ auto main(int argc, char** argv) -> int {
                 brainCfg.robotName = initial.settings.robotName;
                 brainCfg.playerName = initial.settings.playerName;
                 ctx.emplace<gorden::AgentBrain>(makeProvider(), brainCfg, robot, player);
-                ctx.emplace<RobotPanelState>();
+                ctx.emplace<ConversationState>();
+                ctx.emplace<gorden::InterfaceState>(gorden::InterfaceState{.developer = developer});
                 ctx.emplace<AgentLogState>();
                 auto& saveState = ctx.emplace<SaveState>(
                     SaveState{.scenePath = scenePathText, .document = document}
@@ -600,48 +787,22 @@ auto main(int argc, char** argv) -> int {
                 auto& st = ctx.emplace<SettingsState>(initial);
 
                 if (auto* ui = roboslop::devUi(world); ui != nullptr) {
-                    ui->registerWindow(
-                        roboslop::DevWindow{
-                            .id = "robot",
-                            .title = "Robot",
-                            .draw =
-                                [&world]() {
-                                    auto& c = world.registry().ctx();
-                                    drawRobotPanel(
-                                        world, c.get<gorden::AgentBrain>(), c.get<RobotPanelState>()
-                                    );
-                                },
-                            .visible = true,
-                        }
-                    );
-                    ui->registerWindow(
-                        roboslop::DevWindow{
-                            .id = "agentLog",
-                            .title = "Agent log",
-                            .draw =
-                                [&world]() {
-                                    auto& c = world.registry().ctx();
-                                    drawAgentLogPanel(
-                                        c.get<gorden::AgentBrain>(), c.get<AgentLogState>()
-                                    );
-                                },
-                            .visible = true,
-                        }
-                    );
-                    ui->registerWindow(
-                        roboslop::DevWindow{
-                            .id = "settings",
-                            .title = "Settings",
-                            .draw =
-                                [&world]() {
-                                    auto& c = world.registry().ctx();
-                                    drawSettingsPanel(
-                                        world, c.get<SettingsState>(), c.get<gorden::AgentBrain>()
-                                    );
-                                },
-                            .visible = false,
-                        }
-                    );
+                    if (developer) {
+                        ui->registerWindow(
+                            roboslop::DevWindow{
+                                .id = "agentLog",
+                                .title = "Agent log",
+                                .draw =
+                                    [&world]() {
+                                        auto& c = world.registry().ctx();
+                                        drawAgentLogPanel(
+                                            c.get<gorden::AgentBrain>(), c.get<AgentLogState>()
+                                        );
+                                    },
+                                .visible = false,
+                            }
+                        );
+                    }
                     auto& fs = ctx.emplace<roboslop::Vfs>();
                     mountGordenFiles(world, fs);
                     auto& shell = ctx.emplace<roboslop::Shell>(
@@ -678,24 +839,23 @@ auto main(int argc, char** argv) -> int {
                                 st.request = request;
                                 // The work happens in the render pass, so
                                 // the result shows up in the next output.
-                                return {
-                                    .output = "requested; see the Settings window\n", .status = 0
-                                };
+                                return {.output = "requested; see the pause menu\n", .status = 0};
                             }
                         );
                     }
                     ctx.emplace<roboslop::TerminalWindow>(shell);
-                    ui->registerWindow(
-                        roboslop::DevWindow{
-                            .id = "terminal",
-                            .title = "Terminal",
-                            .draw =
-                                [&world]() {
-                                    world.registry().ctx().get<roboslop::TerminalWindow>().draw();
-                                },
-                            .visible = true,
-                        }
-                    );
+                    if (developer) {
+                        ui->registerWindow(
+                            roboslop::DevWindow{
+                                .id = "debugTerminal",
+                                .title = "Developer terminal",
+                                .draw = [terminal = std::make_shared<roboslop::TerminalWindow>(
+                                             shell
+                                         )]() { terminal->draw(); },
+                                .visible = false,
+                            }
+                        );
+                    }
 
                     std::vector<roboslop::WindowVisibility> saved;
                     saved.reserve(st.settings.windows.size());
@@ -787,7 +947,7 @@ auto main(int argc, char** argv) -> int {
                         },
                     });
                     render.add({
-                        .name = "robotChat",
+                        .name = "gameUi",
                         .reads = {"framebuffer"},
                         .writes = {"framebuffer"},
                         .record = [](roboslop::PassCtx& c) {
@@ -805,10 +965,15 @@ auto main(int argc, char** argv) -> int {
                                 spdlog::info("gorden: {}", save.status);
                             }
                             ui->beginFrame();
-                            ui->drawWindows();
+                            if (ctx.get<gorden::InterfaceState>().developer) {
+                                ui->drawWindows();
+                            }
+                            drawGameInterface(*c.world);
                             auto& controls = ctx.get<gorden::PlayerControls>();
                             controls.uiMouse = ui->wantCaptureMouse();
-                            controls.uiKeyboard = ui->wantCaptureKeyboard();
+                            controls.uiKeyboard = ui->wantCaptureKeyboard() ||
+                                                  ctx.get<gorden::InterfaceState>().mode !=
+                                                      gorden::InterfaceMode::Explore;
                             ui->endFrame(c.viewId);
 
                             // Persist window visibility when it changes

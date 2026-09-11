@@ -76,7 +76,7 @@ $(addprefix build-,$(APPS)): build-%:
 
 # Run from build/<preset> so the relative assetRoot ("assets") resolves.
 $(addprefix run-,$(APPS)): run-%:
-	@cd build/$(PRESET) && exec apps/$*/$* $(ARGS)
+	@cd build/$(PRESET) && exec apps/$*/$* $(if $(filter gorden,$*),--dev) $(ARGS)
 
 # `make shaderlab`: the edit → build → run loop for a single app.
 $(APPS): %: build-%

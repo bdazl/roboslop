@@ -74,6 +74,17 @@ export [[nodiscard]] auto makePerfWindow(const FrameStats& stats, std::string mo
                     return;
                 }
                 const auto& last = stats.latest();
+                const auto frame = stats.summary(&FrameSample::cpuFrameMs);
+                const auto gpu = stats.summary(&FrameSample::gpuMs);
+                ImGui::Text(
+                    "%.0f FPS | frame %.2f ms | GPU %.2f ms",
+                    frame.mean > 0.0 ? 1000.0 / frame.mean : 0.0,
+                    frame.mean,
+                    gpu.mean
+                );
+                if (!ImGui::CollapsingHeader("Details")) {
+                    return;
+                }
                 ImGui::Text(
                     "%u draws  %ux%u  %s",
                     last.drawCalls,
@@ -106,6 +117,7 @@ export [[nodiscard]] auto makePerfWindow(const FrameStats& stats, std::string mo
                 ImGui::Text("window: %zu / %zu frames", stats.size(), stats.capacity());
             },
         .visible = false,
+        .autoResize = true,
     };
 }
 

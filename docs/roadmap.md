@@ -183,7 +183,7 @@ way to write them; active goals and beliefs ride along in every
 observation while episodes come back through `recall`. Memory survives
 a session through a new engine save format (`roboslop.scene.savegame`,
 see [the save format](save-format.md)) with explicit Save/Load in the
-Settings window and `save` / `load` in the terminal. Details in
+Escape menu and `save` / `load` in the terminal. Details in
 [agent memory](agent-memory.md). Reflection opportunities beyond the
 existing event triggers, and replay, are not done. They remain planned,
 but the next major priority is M5 playability rather than completing all
@@ -252,7 +252,9 @@ kinematic movement. Room authoring has begun: the default scene is now an
 enclosed room with the reusable terminal-station props, a power unit, a
 central ceiling light and a blocked primitive exit. The visible fixture uses
 a colocated finite-range point light, with the directional light retained as
-broad fill. The locked-door behaviour, interactions and puzzle remain to be built.
+broad fill. The fullscreen computer interaction, anywhere chat and Escape pause menu are
+implemented (2026-09-10); developer panels require `--dev`. The locked-door
+behaviour, richer interactions and puzzle remain to be built.
 
 **Goal.** Start in a small locked room with Gorden, explore and interact,
 solve a computer/terminal puzzle that unlocks/opens the exit, and leave.
@@ -297,7 +299,8 @@ and opens a route out, and saved progression survives loading. Gorden's
 observation can describe the relevant gameplay state, not just object names
 and coordinates.
 
-**Open implementation questions.** Interaction targeting/range and concrete state/API vocabulary; the puzzle
+**Open implementation questions.** Richer interaction targeting beyond the initial
+2 m monitor proximity check and concrete state/API vocabulary; the puzzle
 and its commands/files; controller terminal navigation/text entry; authored
 gameplay setup and save representation. See the accepted boundaries in
 [architecture](architecture.md#accepted-direction-first-playable-gorden-room).

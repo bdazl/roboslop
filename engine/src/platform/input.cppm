@@ -35,6 +35,7 @@ export enum class Key : int {
     F2,
     F3,
     F4,
+    T,
 };
 
 export enum class MouseButton : int {
@@ -44,7 +45,7 @@ export enum class MouseButton : int {
 };
 
 namespace detail {
-inline constexpr std::size_t KeyCount = 14;
+inline constexpr std::size_t KeyCount = 15;
 inline constexpr std::size_t MouseButtonCount = 3;
 } // namespace detail
 
@@ -54,6 +55,9 @@ export struct GamepadSnapshot {
     glm::vec2 leftStick{0.0F};
     glm::vec2 rightStick{0.0F};
     bool buttonB = false;
+    bool buttonA = false;
+    bool buttonX = false;
+    bool buttonStart = false;
 };
 
 export [[nodiscard]] auto stickWithDeadzone(glm::vec2 stick) noexcept -> glm::vec2 {
@@ -155,6 +159,8 @@ namespace {
         return GLFW_KEY_F3;
     case Key::F4:
         return GLFW_KEY_F4;
+    case Key::T:
+        return GLFW_KEY_T;
     }
     return GLFW_KEY_UNKNOWN;
 }
@@ -329,6 +335,9 @@ export [[nodiscard]] auto capturePlatformInput(const Window& window) -> InputSna
                 .rightStick =
                     {pad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], pad.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]},
                 .buttonB = pad.buttons[GLFW_GAMEPAD_BUTTON_B] == GLFW_PRESS,
+                .buttonA = pad.buttons[GLFW_GAMEPAD_BUTTON_A] == GLFW_PRESS,
+                .buttonX = pad.buttons[GLFW_GAMEPAD_BUTTON_X] == GLFW_PRESS,
+                .buttonStart = pad.buttons[GLFW_GAMEPAD_BUTTON_START] == GLFW_PRESS,
             };
             break;
         }

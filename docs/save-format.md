@@ -62,7 +62,7 @@ the engine dictates a file name below
 Gorden uses `stateDir()/gorden/saves/<slot>.json`, with `default` as the slot.
 
 Saving and loading is explicit: the **Save game** / **Load game** buttons in
-Gorden's Settings window, or `save [slot]` / `load [slot]` in its terminal.
+Gorden's Escape menu, or `save [slot]` / `load [slot]` in its terminal.
 There is no autosave — a run is kept only when someone asks for it. Both paths
 raise a request that the render pass carries out, because rebuilding the scene
 needs the `AssetCache`, which only a pass has.

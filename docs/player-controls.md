@@ -3,7 +3,8 @@
 The player is separate from the camera and uses the static low-poly human
 from `models/player.glb`; Gorden uses the two-wheel `models/gorden.glb`. The player
 turns toward movement and keeps that heading when idle. There is no walk
-animation yet. Interactions and the terminal puzzle remain later slices.
+animation yet. The computer and chat now have gameplay interfaces; the terminal
+puzzle remains a later slice.
 
 ## Controls
 
@@ -11,15 +12,44 @@ animation yet. Interactions and the terminal puzzle remain later slices.
 |---|---|---|
 | Move | WASD | Left stick |
 | Orbit camera | Hold right mouse button and move mouse | Right stick |
-| Cancel mouse capture / suppress controls while held | Escape | B |
-| Toggle developer UI | F1 | — |
+| Use nearby computer | E / on-screen button | A |
+| Open chat from anywhere | T / on-screen Chat button | X |
+| Cancel interaction / back / pause menu | Escape | B |
+| Open pause menu while exploring | Escape / Menu button | Start |
+| Toggle developer tools (`--dev` only) | F1 | — |
 
-Release the right mouse button to use developer windows. Escape no longer
-quits Gorden; close its window to quit. A cancelled mouse hold must be
-released before looking again. Keyboard focus in a developer window
-suspends movement and looking, including gamepad input. An unfocused game
-window ignores all gameplay input. A mouse drag starting over a developer
-window cannot become camera capture by moving off it.
+Chat is a fixed panel with conversation history and a text field. Robot replies
+also appear as queued, timed subtitles above the action buttons while exploring.
+Chat suspends player controls while the world and robot continue. The computer
+opens a terminal covering the entire game window; its Chat button opens a
+conversation and Escape returns to the terminal. Escape then leaves the computer;
+another Escape opens the pause menu. Escape in Settings returns to the menu.
+Keyboard/mouse are required for text entry and menu buttons in this slice.
+
+The pause menu offers Resume, Settings, explicit Save/Load and Quit. It pauses
+all fixed simulation systems, including physics, movement and the agent pump.
+An already-running provider request can finish in the background, but its result
+is not applied until simulation resumes. Rendering and UI input continue; paused
+time is discarded rather than caught up on resume.
+
+The first room's `terminal-monitor` is accessible within 2 m of its live transform
+(3D distance from the player's capsule centre). This is a minimal proximity
+interaction, without facing or line-of-sight targeting. Loading a scene/save
+re-evaluates the target; scenes without that id have no computer interaction.
+The terminal currently reuses the existing sandbox shell/VFS; door commands and
+puzzle-specific files are not implemented.
+
+`make gorden` and `make run-gorden` pass `--dev`. Launching the executable without
+that flag gives the game interface alone. Performance, Agent log and Developer
+terminal are available only with `--dev` (and `ROBOSLOP_DEV_UI=ON`). F1 hides those
+tools without hiding the game interface. Performance starts with mean FPS, frame
+time and GPU time; expand Details for the graph and percentiles.
+
+Release the right mouse button to use interface buttons. Entering an interaction
+releases camera capture; a cancelled mouse hold must be released before looking
+again. Keyboard focus in a developer window suspends movement and looking,
+including gamepad input. An unfocused game window ignores all gameplay input.
+A mouse drag starting over UI cannot become camera capture by moving off it.
 
 Movement follows the camera's horizontal heading, irrespective of pitch.
 Speed is 4 m/s, with normalized diagonal input and proportional stick
@@ -51,8 +81,8 @@ with bounded pitch. Free-fly remains available in the editor and Shader Lab.
 
 The avatar starts at `(0, 0.4, 4)` in the demo scene. Custom scenes still
 use that spawn; authored spawn points belong to the later room setup.
-The current demo has only two walls and an open platform edge, so walking
-off it causes a fall. The completed locked room is not built yet.
+The default scene is an enclosed room; its exit is still a static blocker.
+The escape puzzle is not built yet.
 
 Save/load keeps the existing `app.player` transform. Invalid app payloads
 are rejected before changing the live scene or actors. Loading discards the

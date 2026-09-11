@@ -34,6 +34,11 @@ namespace roboslop {
 
 export struct AppExitRequest {};
 
+// Rendering and input continue while the fixed simulation is paused.
+export struct AppSimulationState {
+    bool paused = false;
+};
+
 export auto requestAppClose(World& world) -> void {
     world.registry().ctx().emplace<AppExitRequest>();
 }
@@ -44,6 +49,7 @@ export auto requestAppClose(World& world) -> void {
 //                    World and the App-owned AssetCache so game code
 //                    can request programs without managing handle
 //                    lifetimes.
+//   onFrame        — once per frame after input polling, before fixed updates.
 //   onBuildGraphs  — once after onSetup, before the loop. Receives the
 //                    fixed-step SystemGraph, the render-pass
 //                    RenderGraph, and the per-frame FrameArena
@@ -72,12 +78,16 @@ export struct AppConfig {
     // the engine was configured with ROBOSLOP_DEV_UI=OFF. F1 toggles
     // the overlay at runtime.
     bool enableDevUi = false;
+    // Gameplay ImGui remains available independently of developer tools.
+    bool enableGameUi = false;
     // ImGui layout persistence; empty keeps the layout in memory.
     std::filesystem::path devUiIniPath{};
+    float uiFontSize = 13.0F;
     bool closeOnEscape = true;
     // Optional veto used by document editors to offer Save/Discard/Cancel.
     std::function<bool(World&)> onCloseRequested{};
 
+    std::function<void(World&, Input&)> onFrame{};
     std::function<Result<void>(World&, AssetCache&)> onSetup;
     std::function<void(SystemGraph&, RenderGraph&, FrameArena&)> onBuildGraphs;
 };
@@ -106,16 +116,22 @@ export class App {
         }
         AssetCache assets{cfg.assetRoot};
         std::optional<DevUi> ui;
+#if !ROBOSLOP_DEV_UI
         if (cfg.enableDevUi) {
-#if ROBOSLOP_DEV_UI
-            auto made = DevUi::make(*window, assets, DevUiConfig{.iniPath = cfg.devUiIniPath});
+            spdlog::warn("roboslop: enableDevUi requested but ROBOSLOP_DEV_UI is OFF");
+            cfg.enableDevUi = false;
+        }
+#endif
+        if (cfg.enableGameUi || cfg.enableDevUi) {
+            auto made = DevUi::make(
+                *window,
+                assets,
+                DevUiConfig{.iniPath = cfg.devUiIniPath, .fontSize = cfg.uiFontSize}
+            );
             if (!made) {
                 return std::unexpected(made.error());
             }
             ui.emplace(std::move(*made));
-#else
-            spdlog::warn("roboslop: enableDevUi requested but ROBOSLOP_DEV_UI is OFF");
-#endif
         }
         const unsigned workers = cfg.workerThreads == 0 ? defaultWorkerCount() : cfg.workerThreads;
         FrameArena arena{cfg.frameArenaBytes};
@@ -147,13 +163,14 @@ export class App {
 
     auto run() -> Result<void> {
         window.setResizeCallback([this](int w, int h) { render.resize(w, h); });
+        world.registry().ctx().emplace<AppSimulationState>();
         installJoltWorld(world, physics);
         installAudioDevice(world, audio);
         if (ui) {
             installDevUi(world, *ui);
         }
 
-        if (ui) {
+        if (ui && cfg.enableDevUi) {
             ui->registerWindow(makePerfWindow(
                 stats,
                 RenderContext::multiThreaded() ? "bgfx multi-threaded" : "bgfx single-threaded"
@@ -209,8 +226,12 @@ export class App {
                 }
                 window.cancelClose();
             }
-            if (ui && input.keyPressed(Key::F1)) {
+            if (ui && cfg.enableDevUi && input.keyPressed(Key::F1)) {
                 ui->toggleEnabled();
+            }
+
+            if (cfg.onFrame) {
+                cfg.onFrame(world, input);
             }
 
             // A benchmark must not let a slow frame feed back into the
@@ -219,7 +240,8 @@ export class App {
             const double dt = benchmarking ? ticker.fixedDelta() : wallDt;
             const int steps = ticker.advance(dt);
             const auto fixedStart = std::chrono::steady_clock::now();
-            for (int i = 0; i < steps; ++i) {
+            for (int i = 0; i < steps && !world.registry().ctx().get<AppSimulationState>().paused;
+                 ++i) {
                 SystemCtx ctx{
                     .world = &world,
                     .input = &input,

@@ -45,11 +45,16 @@ its directory. `make apps` lists them.
 ```sh
 make shaderlab                  # build only shaderlab (+ engine, its shaders), then run it
 make editor                     # build and run the primitive scene editor
-make gorden ARGS="..."          # same for gorden; ARGS are forwarded
+make gorden ARGS="..."          # Gorden development mode (--dev); ARGS are forwarded
 make build-<app>                # build only <app>
 make run-<app>                  # run without building
 make run APP=<app>              # alias for run-<app>; APP defaults to gorden
 ```
+
+`make gorden`, `make run-gorden` and `make run APP=gorden` pass `--dev` to
+expose developer tools. Run `apps/gorden/gorden` from the build root without
+`--dev` for the normal game interface. Game UI remains available when
+`ROBOSLOP_DEV_UI=OFF`; that option disables only developer tools.
 
 `make <app>` is the inner loop while working on one application: it
 rebuilds only that app's target and what it depends on, then launches it
@@ -136,7 +141,7 @@ related is fetched or vendored.
 
 | Option | Default | Effect |
 |---|---|---|
-| `ROBOSLOP_DEV_UI` | `ON` | `App` honours `AppConfig::enableDevUi`; Shader Lab and the editor are configured. `OFF` skips those apps; Gorden and engine modules still build. |
+| `ROBOSLOP_DEV_UI` | `ON` | `App` honours `AppConfig::enableDevUi`; Shader Lab and the editor are configured. `OFF` skips those apps; Gorden game UI and engine modules still build. |
 | `ROBOSLOP_BUILD_TESTS` | `ON` | Build the Catch2 test executable. |
 | `ROBOSLOP_SANITIZERS` | empty | See "Sanitisers". |
 
