@@ -31,14 +31,26 @@ export struct ObservedGoal {
     std::string text{};
 };
 
+// What an entity shows the robot beyond its name. `state` is visible
+// from anywhere in range; `detail` only from within inspect reach (see
+// Rules::inspectReach), which is what makes the robot go and look.
+export struct Inspectable {
+    std::string state{};
+    std::string detail{};
+    bool inspected = false; // the robot has read the detail
+};
+
 export struct ObservedEntity {
     std::string name{};
     glm::vec3 position{0.0F};
     float distance = 0.0F;
+    std::string state{};
+    // For the simulation side only; never serialized for the model.
+    roboslop::Entity entity{};
 };
 
 // What the robot gets to know for one think. Deliberately small: the
-// three first tools need positions and names, nothing else (the
+// tools need positions, names and the visible state of things (the
 // "semantic-first, minimal" direction in docs/architecture.md).
 export struct Observation {
     glm::vec3 robotPosition{0.0F};
@@ -70,7 +82,14 @@ export [[nodiscard]] auto buildObservation(
             const float d = glm::distance(t.position, obs.robotPosition);
             if (d <= radius) {
                 obs.nearby.push_back(
-                    ObservedEntity{.name = named.name, .position = t.position, .distance = d}
+                    ObservedEntity{
+                        .name = named.name,
+                        .position = t.position,
+                        .distance = d,
+                        .state = world.has<Inspectable>(e) ? world.get<Inspectable>(e).state
+                                                           : std::string{},
+                        .entity = e,
+                    }
                 );
             }
         }
@@ -95,11 +114,15 @@ export [[nodiscard]] auto observationToJson(const Observation& obs) -> std::stri
     j["player"] = {{"position", vec3Json(obs.playerPosition)}};
     nlohmann::json nearby = nlohmann::json::array();
     for (const auto& e : obs.nearby) {
-        nearby.push_back({
+        nlohmann::json entry{
             {"name", e.name},
             {"position", vec3Json(e.position)},
             {"distance", static_cast<double>(static_cast<int>(e.distance * 10.0F)) / 10.0},
-        });
+        };
+        if (!e.state.empty()) {
+            entry["state"] = e.state;
+        }
+        nearby.push_back(std::move(entry));
     }
     j["nearby"] = std::move(nearby);
     j["events"] = obs.recentEvents;

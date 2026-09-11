@@ -133,7 +133,9 @@ export [[nodiscard]] auto toolSpecs() -> std::vector<roboslop::ToolSpec> {
         },
         roboslop::ToolSpec{
             .name = "inspect",
-            .description = "Look closely at a visible entity by name and learn where it is.",
+            .description = "Look at a visible entity by name: where it is and its state. "
+                           "Details such as labels are only readable within 1 m, so move "
+                           "next to it first.",
             .parametersSchemaJson = R"({"type":"object","properties":{
                 "name":{"type":"string"}},"required":["name"]})",
         },
@@ -294,6 +296,10 @@ export struct Rules {
     std::size_t maxMemoryTextLength = 300; // remember, believe and setGoal texts
     std::size_t maxRecallResults = 5;      // a recall limit above this is clamped
     std::size_t maxActiveGoals = 5;
+    // Horizontal distance within which inspect reads an entity's
+    // details. Far enough to read conduit bay C from beside the power
+    // unit, too short to read it through the cabinet from the front.
+    float inspectReach = 1.0F;
 };
 
 // The validation boundary: a Command comes out only if the simulation

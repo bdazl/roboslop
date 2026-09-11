@@ -301,3 +301,45 @@ TEST_CASE("a belief is rendered into every later observation", "[agent][brain]")
     REQUIRE(requests[1].messages.back().content.contains("crate contents: a key (player"));
     REQUIRE(brain.memory().beliefs().size() == 1);
 }
+
+TEST_CASE("inspect reads details only within reach", "[agent][brain]") {
+    Fixture f;
+    const auto bay = f.world.create();
+    f.world.emplace<roboslop::Transform>(bay, roboslop::Transform{.position = {-3.0F, 0.4F, 0.0F}});
+    f.world.emplace<gorden::Named>(bay, gorden::Named{.name = "Conduit bay C"});
+    f.world.emplace<gorden::Inspectable>(
+        bay, gorden::Inspectable{.state = "sealed", .detail = "Maintenance tag C-17."}
+    );
+    auto provider =
+        std::make_unique<roboslop::ScriptedProvider>(std::vector<roboslop::ChatResponse>{
+            toolCallResponse("inspect", R"({"name": "Conduit bay C"})", "c1"),
+            toolCallResponse("inspect", R"({"name": "Conduit bay C"})", "c2"),
+        });
+    auto* scripted = provider.get();
+    gorden::AgentBrain brain(std::move(provider), gorden::BrainConfig{}, f.robot, f.player);
+    brain.playerSays("what does the bay say?");
+    pumpUntilIdle(brain, f.world);
+    REQUIRE_FALSE(f.world.get<gorden::Inspectable>(bay).inspected);
+
+    // Within reach horizontally, even though the panel sits above the floor.
+    f.world.get<roboslop::Transform>(f.robot).position = {-2.2F, 0.0F, 0.3F};
+    pumpUntilIdle(brain, f.world); // the InspectResult event starts the second think
+    REQUIRE(f.world.get<gorden::Inspectable>(bay).inspected);
+
+    // A third think shows the model both tool results.
+    brain.playerSays("thanks");
+    pumpUntilIdle(brain, f.world);
+    const auto requests = scripted->recordedRequests();
+    REQUIRE(requests.size() == 3);
+    std::vector<std::string> results;
+    for (const auto& m : requests[2].messages) {
+        if (m.role == roboslop::Role::Tool) {
+            results.push_back(m.content);
+        }
+    }
+    REQUIRE(results.size() == 2);
+    REQUIRE(results[0].contains("state: sealed"));
+    REQUIRE(results[0].contains("Too far"));
+    REQUIRE_FALSE(results[0].contains("C-17"));
+    REQUIRE(results[1].contains("C-17"));
+}

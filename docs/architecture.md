@@ -114,9 +114,14 @@ The gameplay and agent code share the `gorden_agent` module library
 - `gorden.interface` — Explore/Chat/Terminal/Menu/Settings modes, once-per-frame
   shortcut routing, pause state and the first room’s monitor proximity check.
   Presentation remains in Gorden’s app; see [player controls](player-controls.md).
-- `gorden.agent.observation` — `Named` component, `buildObservation`
-  (every named entity within a radius, sorted by distance; no
-  line-of-sight yet) and `observationToJson`, the text the model reads.
+- `gorden.first_room` — the first room's Gorden-owned gameplay:
+  `attachSceneSemantics` gives scene entities their perception names and
+  the room's objects their semantic state and close-up details, keyed by
+  scene id.
+- `gorden.agent.observation` — `Named` and `Inspectable` components,
+  `buildObservation` (every named entity within a radius, sorted by
+  distance, with its visible state; no line-of-sight yet) and
+  `observationToJson`, the text the model reads.
   Active goals and beliefs are filled in by the brain, not by
   `buildObservation`.
 - `gorden.agent.memory` — the long-term memory: episodes, beliefs with
@@ -594,9 +599,11 @@ them, but they are not the canonical world-state channel.
 Exactly which facts a robot may observe is an *open question* for
 experiments. We deliberately avoid locking in a broad or god-like
 perception model now. Today observations contain names, positions,
-distance, robot movement, recent events, the player message, goals and
-beliefs. Gameplay should pull in richer semantics: entity kind, relevant
-state and available interactions/affordances, subject to perception rules.
+distance, visible state (a door is `locked`), robot movement, recent events,
+the player message, goals and beliefs. `inspect` adds an entity's detail —
+a label, a tag — only within 1 m horizontally, so reading something means
+the robot has to go there. Gameplay should pull in further semantics: entity
+kind and available interactions/affordances, subject to perception rules.
 Recognizing a locked door is more useful than just locating an entity named
 "exit door". This remains filtered semantic perception, not raw unrestricted
 world access; range is the only visibility limit implemented today.

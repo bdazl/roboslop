@@ -2,6 +2,7 @@ import gorden.agent.brain;
 import gorden.agent.memory;
 import gorden.agent.observation;
 import gorden.agent.robot;
+import gorden.first_room;
 import gorden.save;
 import gorden.player;
 import gorden.interface;
@@ -730,9 +731,7 @@ auto main(int argc, char** argv) -> int {
                 if (auto loaded = runtime.replace(world, assets, document, true); !loaded) {
                     return loaded;
                 }
-                world.forEach<roboslop::SceneIdentity>([&world](auto entity, const auto& identity) {
-                    world.emplace<gorden::Named>(entity, gorden::Named{.name = identity.name});
-                });
+                gorden::attachSceneSemantics(world);
 
                 // Gorden keeps its existing kinematic identity and save origin.
                 const auto robot = world.create();

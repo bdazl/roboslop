@@ -4,6 +4,7 @@
 roboslop_add_module_library(gorden_agent
     MODULES
         src/gameplay/interface.cppm
+        src/gameplay/first_room.cppm
         src/gameplay/player.cppm
         src/gameplay/player_visual.cppm
         src/gameplay/robot_visual.cppm

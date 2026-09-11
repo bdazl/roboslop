@@ -63,3 +63,25 @@ TEST_CASE("observationToJson omits player_message when empty", "[agent][observat
     REQUIRE_FALSE(j.contains("player_message"));
     REQUIRE(j["nearby"].empty());
 }
+
+TEST_CASE("observations carry visible state, not details", "[agent][observation]") {
+    roboslop::World w;
+    const auto robot = w.create();
+    w.emplace<roboslop::Transform>(robot, roboslop::Transform{});
+    const auto door = w.create();
+    w.emplace<roboslop::Transform>(door, roboslop::Transform{.position = {3.0F, 0.0F, 0.0F}});
+    w.emplace<gorden::Named>(door, gorden::Named{.name = "Exit door"});
+    w.emplace<gorden::Inspectable>(
+        door, gorden::Inspectable{.state = "locked", .detail = "held by an interlock"}
+    );
+
+    const auto obs = gorden::buildObservation(w, robot, robot, 10.0F);
+    REQUIRE(obs.nearby.size() == 1);
+    REQUIRE(obs.nearby[0].state == "locked");
+    REQUIRE(obs.nearby[0].entity == door);
+
+    const auto text = gorden::observationToJson(obs);
+    const auto j = nlohmann::json::parse(text);
+    REQUIRE(j["nearby"][0]["state"] == "locked");
+    REQUIRE_FALSE(text.contains("interlock"));
+}

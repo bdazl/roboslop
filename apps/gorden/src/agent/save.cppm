@@ -13,6 +13,7 @@ module;
 
 export module gorden.save;
 
+import gorden.first_room;
 import gorden.player;
 import gorden.agent.brain;
 import gorden.agent.memory;
@@ -135,11 +136,9 @@ export [[nodiscard]] auto applySave(
         return replaced;
     }
     // replace() destroyed the old scene entities, so the new ones need
-    // the perception name the observation looks for, exactly as the
-    // app does after its first instantiation.
-    world.forEach<roboslop::SceneIdentity>([&world](auto entity, const auto& identity) {
-        world.emplace<Named>(entity, Named{.name = identity.name});
-    });
+    // their perception names and semantics, exactly as after the app's
+    // first instantiation.
+    attachSceneSemantics(world);
 
     world.get<roboslop::Transform>(brain.robotEntity()) = robotTransform;
     world.get<roboslop::Transform>(brain.playerEntity()) = playerTransform;

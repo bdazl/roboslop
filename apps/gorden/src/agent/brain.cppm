@@ -1,7 +1,10 @@
 module;
 
+#include <glm/geometric.hpp>
+#include <glm/vec2.hpp>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <deque>
 #include <expected>
@@ -75,7 +78,7 @@ export struct BrainConfig {
     std::string playerName = "Player";
     // `{robot}` and `{player}` are replaced with the names above.
     std::string systemPrompt =
-        "You are {robot}, the robot companion of {player} in a small yard. You perceive "
+        "You are {robot}, the robot companion of {player} in a small locked room. You perceive "
         "the world only through the JSON observation in each user message. Act through "
         "the tools; use say to talk to {player} in one or two short sentences. "
         "Coordinates are metres, y is up. When a move completes or a tool is rejected you "
@@ -373,19 +376,7 @@ export class AgentBrain {
                     // locomotion system when the robot gets there.
                     return "accepted: moving; you will be told when you arrive";
                 } else if constexpr (std::is_same_v<T, Inspect>) {
-                    std::string text = "not visible";
-                    for (const auto& e : obs.nearby) {
-                        if (e.name == c.name) {
-                            text = std::format(
-                                "{} is at ({:.1f}, {:.1f}), {:.1f} m away",
-                                e.name,
-                                e.position.x,
-                                e.position.z,
-                                e.distance
-                            );
-                            break;
-                        }
-                    }
+                    const std::string text = inspect(world, c, obs);
                     queueEvent({.kind = AgentEventKind::InspectResult, .text = text});
                     return text;
                 } else if constexpr (std::is_same_v<T, Say>) {
@@ -442,6 +433,41 @@ export class AgentBrain {
             },
             cmd
         );
+    }
+
+    // Position and state from anywhere in range; the detail only up
+    // close, and reading it is recorded on the entity for gameplay.
+    auto inspect(roboslop::World& world, const Inspect& c, const Observation& obs) const
+        -> std::string {
+        const auto seen = std::ranges::find(obs.nearby, c.name, &ObservedEntity::name);
+        if (seen == obs.nearby.end()) {
+            return "not visible";
+        }
+        std::string text = std::format(
+            "{} is at ({:.1f}, {:.1f}), {:.1f} m away",
+            seen->name,
+            seen->position.x,
+            seen->position.z,
+            seen->distance
+        );
+        if (!seen->state.empty()) {
+            text += std::format("; state: {}", seen->state);
+        }
+        auto* inspectable = world.tryGet<Inspectable>(seen->entity);
+        if (inspectable == nullptr || inspectable->detail.empty()) {
+            return text;
+        }
+        const glm::vec2 offset{
+            seen->position.x - obs.robotPosition.x, seen->position.z - obs.robotPosition.z
+        };
+        if (glm::length(offset) > cfg.rules.inspectReach) {
+            return text +
+                   std::format(
+                       ". Too far to make out details; move within {:.1f} m", cfg.rules.inspectReach
+                   );
+        }
+        inspectable->inspected = true;
+        return text + ". " + inspectable->detail;
     }
 
     // Working memory is bounded. Drop oldest messages, then make sure
