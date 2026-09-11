@@ -38,6 +38,7 @@ export enum class AgentEventKind : int {
     InspectResult,
     Said,
     ProviderError,
+    WorldEvent,
 };
 
 export [[nodiscard]] constexpr auto eventKindName(AgentEventKind k) noexcept -> std::string_view {
@@ -54,6 +55,8 @@ export [[nodiscard]] constexpr auto eventKindName(AgentEventKind k) noexcept -> 
         return "said";
     case AgentEventKind::ProviderError:
         return "provider_error";
+    case AgentEventKind::WorldEvent:
+        return "world_event";
     }
     return "?";
 }
@@ -132,6 +135,12 @@ export class AgentBrain {
         chainedThinks = 0;
         capLogged = false;
         queueEvent({.kind = AgentEventKind::PlayerMessage, .text = std::move(text)});
+    }
+
+    // Something happened in the world that the robot notices, such as
+    // the exit door opening. Like any event, it makes the robot think.
+    auto perceive(std::string text) -> void {
+        queueEvent({.kind = AgentEventKind::WorldEvent, .text = std::move(text)});
     }
 
     // `dt` is the fixed step; the brain keeps its own simulation clock

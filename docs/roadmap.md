@@ -253,8 +253,12 @@ enclosed room with the reusable terminal-station props, a power unit, a
 central ceiling light and a blocked primitive exit. The visible fixture uses
 a colocated finite-range point light, with the directional light retained as
 broad fill. The fullscreen computer interaction, anywhere chat and Escape pause menu are
-implemented (2026-09-10); developer panels require `--dev`. The locked-door
-behaviour, richer interactions and puzzle remain to be built.
+implemented (2026-09-10); developer panels require `--dev`. The safety
+interlock puzzle is implemented (2026-09-11): the terminal verifies the tag
+and relay order that Gorden reads up close in conduit bay C, and opening the
+door removes its collision and slides it into the wall; see the
+[first-room design](gorden-first-room-design.md). A deterministic Routine
+mode, so that the loop is completable without an LLM, remains.
 
 **Goal.** Start in a small locked room with Gorden, explore and interact,
 solve a computer/terminal puzzle that unlocks/opens the exit, and leave.

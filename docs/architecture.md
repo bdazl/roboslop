@@ -101,7 +101,10 @@ without a physics body or pathfinding. The computer opens a fullscreen terminal
 through a proximity interaction; chat is
 available anywhere through a HUD button/T and replies appear as timed subtitles.
 An Escape menu pauses simulation and offers settings, save/load and quit. Developer
-windows require `--dev`. There is no door state or escape puzzle yet.
+windows require `--dev`. The exit is locked by a safety interlock: the
+terminal's `door` and `interlock` commands verify it with the tag and relay
+order Gorden can read in conduit bay C, and open the door, which slides into
+the wall and loses its collision.
 
 The robot perceives structured observations and acts through validated
 high-level tools; it never drives locomotion or physics frame by frame.
@@ -117,7 +120,10 @@ The gameplay and agent code share the `gorden_agent` module library
 - `gorden.first_room` — the first room's Gorden-owned gameplay:
   `attachSceneSemantics` gives scene entities their perception names and
   the room's objects their semantic state and close-up details, keyed by
-  scene id.
+  scene id. `FirstRoomProgress` (a context singleton) holds the interlock
+  and door state; `verifyInterlock` and `openExitDoor` are the validated
+  operations, and `registerFirstRoomCommands` puts thin terminal commands
+  and `/var/log/interlock.log` over them.
 - `gorden.agent.observation` — `Named` and `Inspectable` components,
   `buildObservation` (every named entity within a radius, sorted by
   distance, with its visible state; no line-of-sight yet) and
@@ -139,7 +145,7 @@ The gameplay and agent code share the `gorden_agent` module library
 - `gorden.agent.robot` — `RobotMotion` and the kinematic
   `robotLocomotion` system (straight line on XZ, no physics body).
 - `gorden.agent.brain` — `AgentBrain`: an event queue (player message,
-  tool rejected, move completed, inspect result), a bounded working
+  tool rejected, move completed, inspect result, world event), a bounded working
   memory, the long-term `AgentMemory`, one in-flight `AsyncCompletion`,
   and the validated action log.
   Events are the only trigger for a think; chained thinks are capped
@@ -558,18 +564,18 @@ player used a computer in the world, rather than being a permanent debug
 panel. Keep the developer terminal/debug UI separately available through
 the developer UI; gameplay access must not depend on opening a debug window.
 
-The current computer reuses the existing sandbox VFS mounts as an initial
-interface. This is not yet the puzzle’s final file/command set; select that
-when implementing the door puzzle. Any
+The computer reuses the existing sandbox VFS mounts and adds the first
+room's puzzle surface: `door status|open`, `interlock verify <tag>
+<colour>...` and the read-only `/var/log/interlock.log`. Any
 agent terminal/shell access must remain sandboxed to game abstractions and
 the VFS, never arbitrary host execution; no shell tool exists for agents today.
 
 ### First puzzle and persistence
 
-The room needs the player, Gorden, a computer and a locked exit door; the
-existing generator or another small subsystem is a possible ingredient.
-No puzzle solution is fixed yet. Its success must change real simulation
-state, including the physical/visual exit and progression:
+The room has the player, Gorden, a computer and an exit door locked by a
+safety interlock; see the [first-room design](gorden-first-room-design.md).
+Its success changes real simulation state, including the physical/visual
+exit and progression:
 
 ```text
 terminal action → validated game command → door state changes

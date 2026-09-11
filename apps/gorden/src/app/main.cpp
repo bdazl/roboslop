@@ -538,6 +538,7 @@ auto mountGordenFiles(roboslop::World& world, roboslop::Vfs& fs) -> void {
     (void)fs.writeFile(
         home + "/README",
         "This is Gorden's inside. Try:\n"
+        "  door status\n"
         "  tail -f /var/log/agent.log\n"
         "  cat /proc/gorden/observation\n"
         "  cat /etc/gorden/settings.json\n"
@@ -776,6 +777,7 @@ auto main(int argc, char** argv) -> int {
                 brainCfg.robotName = initial.settings.robotName;
                 brainCfg.playerName = initial.settings.playerName;
                 ctx.emplace<gorden::AgentBrain>(makeProvider(), brainCfg, robot, player);
+                ctx.emplace<gorden::FirstRoomProgress>();
                 ctx.emplace<ConversationState>();
                 ctx.emplace<gorden::InterfaceState>(gorden::InterfaceState{.developer = developer});
                 ctx.emplace<AgentLogState>();
@@ -842,6 +844,7 @@ auto main(int argc, char** argv) -> int {
                             }
                         );
                     }
+                    gorden::registerFirstRoomCommands(shell, fs, world);
                     ctx.emplace<roboslop::TerminalWindow>(shell);
                     if (developer) {
                         ui->registerWindow(

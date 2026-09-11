@@ -11,6 +11,36 @@ links are left as written; they are history.
 
 ---
 
+## 2026-09-11 — Open the first room's exit through a safety interlock
+
+**Decision.** Implement the first slice of the
+[first-room design](gorden-first-room-design.md). `door open` succeeds only
+after `interlock verify C-17 blue yellow blue red`; opening releases the
+door's static body and slides it 2.4 m into the exit wall. Conduit bay C, a
+panel in the gap behind the power unit, carries the tag and relay order, and
+`/var/log/interlock.log` points there. The answer is a constant.
+
+The room's semantics live in `gorden.first_room` as a table keyed by scene
+id, not in the scene document. Observations show an entity's visible state
+(`locked`, `open`); `inspect` returns its detail only within 1 m
+horizontally (`Rules::inspectReach`). Opening the door reaches the robot
+as a `world_event` through `AgentBrain::perceive`.
+
+**Why.** The puzzle needs the terminal, which knows the procedure, and the
+robot, which can reach and read the clue. The gap is narrower than the
+player's capsule, and the 1 m reach keeps the robot from reading the panel
+through the cabinet. The correct answer is the gate rather than a record of
+the robot's inspection. That keeps the rules simple to test, and a player
+who already knows the answer loses nothing. Gameplay semantics stay in
+Gorden until another consumer needs them in the engine.
+
+**Where.** `gorden.first_room`, `gorden.agent.observation` (`Inspectable`),
+`gorden.agent.brain`, `gorden.agent.tools` and
+`apps/gorden/assets/scenes/room.json`. Routine cognition, which would make
+the loop completable without a model, is the next step.
+
+---
+
 ## 2026-09-10 — Separate Gorden gameplay UI from developer windows
 
 **Decision.** Use fixed game overlays for anywhere chat, timed robot subtitles,
