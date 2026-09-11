@@ -7,6 +7,7 @@ import roboslop.scene.transform;
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <string_view>
 
@@ -111,6 +112,39 @@ TEST_CASE("The authored room grounds props on explicit support surfaces", "[gord
     REQUIRE(scene.pointLight->position.x == Catch::Approx(lightGlobe->transform.position.x));
     REQUIRE(scene.pointLight->position.y == Catch::Approx(lightGlobe->transform.position.y));
     REQUIRE(scene.pointLight->position.z == Catch::Approx(lightGlobe->transform.position.z));
+}
+
+TEST_CASE("Conduit bay C hides behind the power unit", "[gorden][scene]") {
+    const auto loaded = roboslop::loadScene(assets() / "scenes/room.json");
+    REQUIRE(loaded);
+    const auto& scene = *loaded;
+    const auto* wall = findObject(scene, "wall-back");
+    const auto* unit = findObject(scene, "power-unit");
+    const auto* bay = findObject(scene, "conduit-bay-c");
+    REQUIRE(wall != nullptr);
+    REQUIRE(unit != nullptr);
+    REQUIRE(bay != nullptr);
+
+    const float wallFace = wall->transform.position.z + (wall->transform.scale.z * 0.5F);
+    const auto unitBounds = loadBounds(*unit);
+    const float unitBack =
+        unit->transform.position.z + (unitBounds.min.z * unit->transform.scale.z);
+    const float bayBack = bay->transform.position.z - (bay->transform.scale.z * 0.5F);
+    const float bayFront = bay->transform.position.z + (bay->transform.scale.z * 0.5F);
+
+    // Mounted on the wall, clear of the cabinet, and in a gap the
+    // player's 0.35 m capsule cannot enter (the robot has no body).
+    REQUIRE(bayBack == Catch::Approx(wallFace).margin(0.001F));
+    REQUIRE(bayFront < unitBack);
+    REQUIRE(unitBack - wallFace < 2.0F * 0.35F);
+    REQUIRE(
+        std::abs(bay->transform.position.x - unit->transform.position.x) <
+        unitBounds.max.x * unit->transform.scale.x
+    );
+    REQUIRE(
+        bay->transform.position.y + (bay->transform.scale.y * 0.5F) <
+        unit->transform.position.y + (unitBounds.max.y * unit->transform.scale.y)
+    );
 }
 
 TEST_CASE("The robot visual shares its actor's ground contact", "[gorden][model]") {

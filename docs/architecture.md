@@ -84,7 +84,9 @@ playable without an LLM.
 
 **Current state.** Gorden loads the shared scene document through
 `SceneRuntime`: an enclosed room blockout with a terminal desk, computer,
-chair, power unit, central ceiling light and a primitive blocked exit. The
+chair, power unit, central ceiling light and a primitive blocked exit.
+Conduit bay C, the first puzzle's clue panel, sits on the wall in a gap behind
+the power unit that the player's capsule cannot enter. The
 visible fixture has a colocated point light with finite range, while a
 directional light provides broad fill; emissive materials are not implemented.
 Neither light casts shadows yet. Static scene objects have rigid-body physics.

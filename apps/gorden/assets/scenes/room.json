@@ -5,6 +5,7 @@
     "wall": [0.48, 0.54, 0.58],
     "trim": [0.10, 0.38, 0.45],
     "door": [0.20, 0.30, 0.34],
+    "conduit": [0.62, 0.52, 0.18],
     "light_fixture": [0.12, 0.16, 0.18],
     "light_globe": [1.0, 0.90, 0.65]
   },
@@ -135,7 +136,7 @@
     },
     {
       "id": "exit-door",
-      "name": "Locked exit door",
+      "name": "Exit door",
       "geometry": "cube",
       "material": "door",
       "transform": {
@@ -234,6 +235,18 @@
         "scale": [1, 1, 1]
       },
       "body": "static"
+    },
+    {
+      "id": "conduit-bay-c",
+      "name": "Conduit bay C",
+      "geometry": "cube",
+      "material": "conduit",
+      "transform": {
+        "position": [-3.9, 0.45, -5.58],
+        "rotation": [1, 0, 0, 0],
+        "scale": [0.5, 0.35, 0.04]
+      },
+      "body": "none"
     }
   ]
 }
