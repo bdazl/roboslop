@@ -1,6 +1,7 @@
 import gorden.agent.brain;
 import gorden.agent.memory;
 import gorden.agent.observation;
+import gorden.first_room;
 import gorden.save;
 import roboslop.render.asset_cache;
 import roboslop.scene.document;
@@ -73,9 +74,10 @@ TEST_CASE("savePath puts slots under the state directory", "[agent][save]") {
 TEST_CASE("A capture carries the scene objects and the agent's memory", "[agent][save]") {
     Fixture f;
     auto brain = brainWithMemory(f);
-    const auto save = gorden::captureSave(f.world, brain, "scenes/room.json");
+    const auto save =
+        gorden::captureSave(f.world, brain, gorden::FirstRoomProgress{}, "scenes/room.json");
 
-    REQUIRE(save.app.at("version") == 2);
+    REQUIRE(save.app.at("version") == 3);
     REQUIRE(save.scene == "scenes/room.json");
     REQUIRE(save.objects.size() == 1);
     REQUIRE(save.objects[0].id == "crate");
@@ -84,13 +86,38 @@ TEST_CASE("A capture carries the scene objects and the agent's memory", "[agent]
     REQUIRE(save.app.at("player").at("position")[2] == 5.0F);
     REQUIRE(save.app.at("memory").at("episodes").size() == 1);
     REQUIRE(save.app.at("sim_time") == 12.0);
+    REQUIRE(save.app.at("first_room").at("door_open") == false);
     REQUIRE(roboslop::validateSaveGame(save));
+}
+
+TEST_CASE("A capture carries the first room's progress", "[agent][save]") {
+    Fixture f;
+    auto brain = brainWithMemory(f);
+    const auto bay = f.world.create();
+    f.world.emplace<roboslop::Transform>(bay, roboslop::Transform{});
+    f.world.emplace<roboslop::SceneIdentity>(
+        bay,
+        roboslop::SceneIdentity{.id = std::string{gorden::ConduitBayId}, .name = "Conduit bay C"}
+    );
+    f.world.emplace<gorden::Inspectable>(bay, gorden::Inspectable{.inspected = true});
+
+    const auto save = gorden::captureSave(
+        f.world,
+        brain,
+        gorden::FirstRoomProgress{.interlockVerified = true, .doorOpen = true},
+        "scenes/room.json"
+    );
+    const auto& room = save.app.at("first_room");
+    REQUIRE(room.at("interlock_verified") == true);
+    REQUIRE(room.at("door_open") == true);
+    REQUIRE(room.at("conduit_bay_inspected") == true);
 }
 
 TEST_CASE("A captured save survives a trip through a file", "[agent][save]") {
     Fixture f;
     auto brain = brainWithMemory(f);
-    const auto save = gorden::captureSave(f.world, brain, "scenes/room.json");
+    const auto save =
+        gorden::captureSave(f.world, brain, gorden::FirstRoomProgress{}, "scenes/room.json");
 
     const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
     const auto file = std::filesystem::temp_directory_path() /
@@ -110,7 +137,8 @@ TEST_CASE("A captured save survives a trip through a file", "[agent][save]") {
 TEST_CASE("Rejected app payload leaves the world untouched", "[agent][save]") {
     Fixture fixture;
     auto brain = brainWithMemory(fixture);
-    auto save = gorden::captureSave(fixture.world, brain, "scenes/room.json");
+    auto save =
+        gorden::captureSave(fixture.world, brain, gorden::FirstRoomProgress{}, "scenes/room.json");
     save.app["robot"]["position"] = {8.0F, 0.0F, 0.0F};
     SECTION("unsupported app version") {
         save.app["version"] = 99;
@@ -124,13 +152,22 @@ TEST_CASE("Rejected app payload leaves the world untouched", "[agent][save]") {
     SECTION("invalid simulation time") {
         save.app["sim_time"] = -1.0;
     }
+    SECTION("exit door open without a verified interlock") {
+        save.app["first_room"]["door_open"] = true;
+    }
+    SECTION("missing first-room progress") {
+        save.app.erase("first_room");
+    }
     // No render context: rejecting the payload must happen before scene
     // replacement can allocate graphics resources or destroy entities.
     roboslop::AssetCache assets{"assets"};
     roboslop::SceneRuntime runtime;
-    const auto result =
-        gorden::applySave(fixture.world, assets, runtime, roboslop::SceneDocument{}, brain, save);
+    gorden::FirstRoomProgress progress{.interlockVerified = true};
+    const auto result = gorden::applySave(
+        fixture.world, assets, runtime, roboslop::SceneDocument{}, brain, progress, save
+    );
     REQUIRE_FALSE(result);
+    REQUIRE(progress.interlockVerified);
     REQUIRE(fixture.world.valid(fixture.crate));
     REQUIRE(fixture.world.get<roboslop::Transform>(fixture.robot).position.x == 1.0F);
     REQUIRE(fixture.world.get<roboslop::Transform>(fixture.player).position.x == 0.0F);

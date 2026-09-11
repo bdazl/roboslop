@@ -256,8 +256,8 @@ broad fill. The fullscreen computer interaction, anywhere chat and Escape pause 
 implemented (2026-09-10); developer panels require `--dev`. The safety
 interlock puzzle is implemented (2026-09-11): the terminal verifies the tag
 and relay order that Gorden reads up close in conduit bay C, and opening the
-door removes its collision and slides it into the wall; see the
-[first-room design](gorden-first-room-design.md). A deterministic Routine
+door removes its collision and slides it into the wall. The progress survives
+save/load; see the [first-room design](gorden-first-room-design.md). A deterministic Routine
 mode, so that the loop is completable without an LLM, remains.
 
 **Goal.** Start in a small locked room with Gorden, explore and interact,

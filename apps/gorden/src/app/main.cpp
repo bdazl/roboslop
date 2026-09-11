@@ -132,9 +132,10 @@ auto performSaveRequest(
     roboslop::World& world, roboslop::AssetCache& assets, SaveState& st, SaveState::Request request
 ) -> std::string {
     auto& brain = world.registry().ctx().get<gorden::AgentBrain>();
+    auto& progress = world.registry().ctx().get<gorden::FirstRoomProgress>();
     const auto path = gorden::savePath(st.slot);
     if (request == SaveState::Request::Save) {
-        const auto save = gorden::captureSave(world, brain, st.scenePath);
+        const auto save = gorden::captureSave(world, brain, progress, st.scenePath);
         if (auto written = roboslop::saveSaveGame(path, save); !written) {
             return std::format(
                 "save failed: {} ({})", written.error().message, written.error().context
@@ -147,7 +148,8 @@ auto performSaveRequest(
         return std::format("load failed: {} ({})", loaded.error().message, loaded.error().context);
     }
     auto& runtime = world.registry().ctx().get<roboslop::SceneRuntime>();
-    if (auto applied = gorden::applySave(world, assets, runtime, st.document, brain, *loaded);
+    if (auto applied =
+            gorden::applySave(world, assets, runtime, st.document, brain, progress, *loaded);
         !applied) {
         return std::format(
             "load failed: {} ({})", applied.error().message, applied.error().context

@@ -13,6 +13,7 @@ import gorden.player_visual;
 import gorden.robot_visual;
 import roboslop.render.model;
 import roboslop.physics;
+import roboslop.physics.components;
 import roboslop.app;
 import roboslop.core.error;
 import roboslop.ecs;
@@ -118,6 +119,7 @@ auto main(int argc, char** argv) -> int {
              world.emplace<gorden::Robot>(robot);
              world.emplace<gorden::RobotMotion>(robot, gorden::RobotMotion{.speed = 2.5F});
 
+             world.registry().ctx().emplace<gorden::FirstRoomProgress>();
              auto& brain = world.registry().ctx().emplace<gorden::AgentBrain>(
                  std::make_unique<roboslop::ScriptedProvider>(
                      std::vector<roboslop::ChatResponse>{}
@@ -169,6 +171,21 @@ auto main(int argc, char** argv) -> int {
                           auto& world = *c.world;
                           auto& brain = world.registry().ctx().get<gorden::AgentBrain>();
                           auto& runtime = world.registry().ctx().get<roboslop::SceneRuntime>();
+                          auto& progress = world.registry().ctx().get<gorden::FirstRoomProgress>();
+                          const auto doorState = [&] {
+                              const auto door = gorden::findSceneEntity(world, gorden::ExitDoorId);
+                              struct {
+                                  float z;
+                                  bool body;
+                                  std::string state;
+                              } out{
+                                  world.get<roboslop::Transform>(*door).position.z,
+                                  world.has<roboslop::RigidBody>(*door) ||
+                                      world.has<roboslop::BodyDesc>(*door),
+                                  world.get<gorden::Inspectable>(*door).state,
+                              };
+                              return out;
+                          };
                           const auto fail = [&](std::string why) {
                               failed = true;
                               failure = std::move(why);
@@ -217,8 +234,15 @@ auto main(int argc, char** argv) -> int {
                               // will remember it, then write the save.
                               world.get<roboslop::Transform>(brain.robotEntity()).position.x =
                                   MovedX;
+                              // Solve the room, so the save carries an open door.
+                              const auto bay = gorden::findSceneEntity(world, gorden::ConduitBayId);
+                              world.get<gorden::Inspectable>(*bay).inspected = true;
+                              progress.interlockVerified = true;
+                              if (!gorden::openExitDoor(world, progress, brain)) {
+                                  fail("the verified interlock did not open the door");
+                              }
                               const auto save =
-                                  gorden::captureSave(world, brain, "scenes/room.json");
+                                  gorden::captureSave(world, brain, progress, "scenes/room.json");
                               if (!roboslop::saveSaveGame(savePath, save)) {
                                   fail("saveSaveGame failed");
                               }
@@ -229,13 +253,14 @@ auto main(int argc, char** argv) -> int {
                               world.get<roboslop::Transform>(brain.playerEntity()).position.x =
                                   5.0F;
                               world.get<gorden::Player>(brain.playerEntity()).reset();
+                              progress = {};
                           } else if (frame == 3) {
                               auto loaded = roboslop::loadSaveGame(savePath);
                               if (!loaded) {
                                   fail("loadSaveGame failed: " + loaded.error().context);
                               } else if (
                                   auto applied = gorden::applySave(
-                                      world, *c.assets, runtime, document, brain, *loaded
+                                      world, *c.assets, runtime, document, brain, progress, *loaded
                                   );
                                   !applied
                               ) {
@@ -266,12 +291,20 @@ auto main(int argc, char** argv) -> int {
                               if (!found) {
                                   fail("the rebuilt scene lost its perception names");
                               }
+                              const auto door = doorState();
+                              const auto bay = gorden::findSceneEntity(world, gorden::ConduitBayId);
+                              if (!progress.doorOpen || !progress.interlockVerified || door.body ||
+                                  std::abs(door.z + 2.4F) > 0.001F || door.state != "open" ||
+                                  !world.get<gorden::Inspectable>(*bay).inspected) {
+                                  fail("the open exit door did not come back");
+                              }
                           } else if (frame == 5) {
-                              auto legacy = gorden::captureSave(world, brain, "scenes/room.json");
+                              auto legacy =
+                                  gorden::captureSave(world, brain, progress, "scenes/room.json");
                               legacy.app["version"] = 1;
                               legacy.app["player"]["scale"] = {0.7F, 1.8F, 0.7F};
                               if (auto applied = gorden::applySave(
-                                      world, *c.assets, runtime, document, brain, legacy
+                                      world, *c.assets, runtime, document, brain, progress, legacy
                                   );
                                   !applied) {
                                   fail("legacy player save failed");
@@ -285,10 +318,15 @@ auto main(int argc, char** argv) -> int {
                                   std::abs(bounds->max.y - bounds->min.y - 1.8F) > 0.001F) {
                                   fail("player asset is not 1.8 metres tall");
                               }
+                              const auto door = doorState();
+                              if (progress.doorOpen || progress.interlockVerified || !door.body ||
+                                  door.z != 0.0F || door.state != "locked") {
+                                  fail("a save from before the puzzle did not start it afresh");
+                              }
                               const auto current =
-                                  gorden::captureSave(world, brain, "scenes/room.json");
-                              if (current.app.at("version") != 2) {
-                                  fail("new saves must use app payload version 2");
+                                  gorden::captureSave(world, brain, progress, "scenes/room.json");
+                              if (current.app.at("version") != 3) {
+                                  fail("new saves must use app payload version 3");
                               }
                           }
 

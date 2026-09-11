@@ -6,6 +6,19 @@ vertical slice. It elaborates the accepted M5 direction in
 not by itself lock names, commands, data structures or progression values.
 Decisions made during implementation belong in [decisions.md](decisions.md).
 
+**Status (2026-09-11).** Implementation steps 1–3 and the first-room part of
+step 9 exist:
+
+- the interlock and door operations and their terminal commands;
+- `/var/log/interlock.log`;
+- inspectable semantics with a 1 m detail reach;
+- the door-opened world event;
+- first-room progress in save payload version 3.
+
+Conduit bay C sits in the gap behind the power unit. The gap is narrower than
+the player's capsule, and the robot, which has no body, drives into it.
+Routine cognition is next.
+
 ## Purpose
 
 The first puzzle should teach the player how to collaborate with Gorden, not

@@ -134,8 +134,8 @@ The gameplay and agent code share the `gorden_agent` module library
   provenance, goals, keyword retrieval and JSON serialisation. Only the
   validated tools write to it. See [agent memory](agent-memory.md).
 - `gorden.save` — capture and restore: the scene objects' transforms go
-  in the engine's save game, the robot, the player and the memory in its
-  `app` payload. Loading rebuilds the scene through `SceneRuntime` so
+  in the engine's save game, the robot, the player, the memory and the first
+  room's progress in its `app` payload. Loading rebuilds the scene through `SceneRuntime` so
   the physics bodies follow; the player controller is reset at the restored
   transform, discarding velocity and cached contacts.
 - `gorden.agent.tools` — the tool schemas, `parseToolCall` (JSON →
@@ -582,12 +582,11 @@ terminal action → validated game command → door state changes
     → physical/visual world changes → world event → agent can perceive/react
 ```
 
-Savegames must persist that progression and restore a consistent door and
-world state. The existing save container and Gorden-owned `app` payload
-provide the starting point; today's saves contain transforms and agent
-memory, not lock/puzzle state. The gameplay state representation, authored
-setup and save payload changes remain open; a generic engine puzzle or
-interaction subsystem is not implied.
+Savegames persist that progression in Gorden's `app` payload (version 3,
+see [save format](save-format.md)) and restore a consistent door: loading
+rebuilds the closed door from the scene document, then opens it again if the
+save says so. A generic engine puzzle or interaction subsystem is not
+implied.
 
 ## Accepted direction: AI and agents
 

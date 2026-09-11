@@ -32,9 +32,16 @@ namespace gorden {
 
 // Gorden's half of a save file. The engine stores the scene and the
 // transforms of its objects (see docs/save-format.md); everything that
-// is Gorden's own — the robot, the player and the robot's memory —
-// goes in the save's opaque `app` object, versioned here.
-constexpr int AppPayloadVersion = 2;
+// is Gorden's own — the robot, the player, the robot's memory and the
+// first room's progress — goes in the save's opaque `app` object,
+// versioned here.
+constexpr int AppPayloadVersion = 3;
+
+[[nodiscard]] static auto conduitBayInspected(roboslop::World& world) -> bool {
+    const auto bay = findSceneEntity(world, ConduitBayId);
+    const auto* inspectable = bay ? world.tryGet<Inspectable>(*bay) : nullptr;
+    return inspectable != nullptr && inspectable->inspected;
+}
 
 export [[nodiscard]] auto savePath(std::string_view slot) -> std::filesystem::path {
     return roboslop::stateDir() / "gorden" / "saves" / (std::string{slot} + ".json");
@@ -43,9 +50,12 @@ export [[nodiscard]] auto savePath(std::string_view slot) -> std::filesystem::pa
 // `world` is taken by mutable reference only to dodge a clang 22 crash
 // when the const forEach overload is instantiated here; nothing in this
 // function writes to the world.
-export [[nodiscard]] auto
-captureSave(roboslop::World& world, const AgentBrain& brain, std::string scene)
-    -> roboslop::SaveGame {
+export [[nodiscard]] auto captureSave(
+    roboslop::World& world,
+    const AgentBrain& brain,
+    const FirstRoomProgress& progress,
+    std::string scene
+) -> roboslop::SaveGame {
     roboslop::SaveGame save{.scene = std::move(scene)};
     world.forEach<roboslop::SceneIdentity, roboslop::Transform>(
         [&save](
@@ -63,6 +73,12 @@ captureSave(roboslop::World& world, const AgentBrain& brain, std::string scene)
         {"player", roboslop::transformToJson(world.get<roboslop::Transform>(brain.playerEntity()))},
         {"sim_time", brain.simTime()},
         {"memory", toJson(brain.memory())},
+        {"first_room",
+         {
+             {"interlock_verified", progress.interlockVerified},
+             {"door_open", progress.doorOpen},
+             {"conduit_bay_inspected", conduitBayInspected(world)},
+         }},
     };
     return save;
 }
@@ -87,6 +103,7 @@ export [[nodiscard]] auto applySave(
     roboslop::SceneRuntime& runtime,
     roboslop::SceneDocument document,
     AgentBrain& brain,
+    FirstRoomProgress& progress,
     const roboslop::SaveGame& save
 ) -> roboslop::Result<void> {
     // Validate the whole app payload before rebuilding bodies or changing
@@ -96,9 +113,11 @@ export [[nodiscard]] auto applySave(
     roboslop::Transform playerTransform;
     AgentMemory restoredMemory;
     double simTime = 0.0;
+    FirstRoomProgress restoredProgress;
+    bool bayInspected = false;
     try {
         const int version = save.app.value("version", 0);
-        if (version != 1 && version != AppPayloadVersion) {
+        if (version < 1 || version > AppPayloadVersion) {
             return std::unexpected(saveError("unsupported gorden payload version"));
         }
         robotTransform = roboslop::transformFromJson(save.app.at("robot"));
@@ -119,11 +138,26 @@ export [[nodiscard]] auto applySave(
             return std::unexpected(memory.error());
         }
         restoredMemory = std::move(*memory);
+        // Saves from before the first room's puzzle start it afresh.
+        if (version >= 3) {
+            const auto& room = save.app.at("first_room");
+            restoredProgress.interlockVerified = room.at("interlock_verified").get<bool>();
+            restoredProgress.doorOpen = room.at("door_open").get<bool>();
+            bayInspected = room.at("conduit_bay_inspected").get<bool>();
+            if (restoredProgress.doorOpen && !restoredProgress.interlockVerified) {
+                return std::unexpected(saveError("exit door open without a verified interlock"));
+            }
+        }
     } catch (const nlohmann::json::exception& e) {
         return std::unexpected(saveError(e.what()));
     }
 
     for (const auto& saved : save.objects) {
+        // The door's pose follows the progress restored below, from the
+        // authored closed door; its saved transform is not trusted.
+        if (saved.id == ExitDoorId) {
+            continue;
+        }
         auto it = std::ranges::find(document.objects, saved.id, &roboslop::SceneObject::id);
         if (it == document.objects.end()) {
             // The scene was edited since the save was written; the
@@ -139,6 +173,13 @@ export [[nodiscard]] auto applySave(
     // their perception names and semantics, exactly as after the app's
     // first instantiation.
     attachSceneSemantics(world);
+    if (const auto bay = findSceneEntity(world, ConduitBayId)) {
+        if (auto* inspectable = world.tryGet<Inspectable>(*bay)) {
+            inspectable->inspected = bayInspected;
+        }
+    }
+    progress = restoredProgress;
+    applyFirstRoomState(world, progress);
 
     world.get<roboslop::Transform>(brain.robotEntity()) = robotTransform;
     world.get<roboslop::Transform>(brain.playerEntity()) = playerTransform;
