@@ -271,8 +271,9 @@ auto main(int argc, char** argv) -> int {
                                   MovedX) {
                                   fail("the robot did not return to its saved position");
                               }
-                              if (world.get<roboslop::Transform>(brain.playerEntity()).position.x !=
-                                  0.0F) {
+                              // One character step after the load may leave float noise.
+                              if (std::abs(world.get<roboslop::Transform>(brain.playerEntity())
+                                               .position.x) > 0.001F) {
                                   fail(
                                       "the player controller did not return to its saved position"
                                   );
